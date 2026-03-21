@@ -3,136 +3,145 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Truc valenciano · Prototipo 1 vs 1</title>
+  <title>Truc Valenciano</title>
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="game.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="titlebar">
-      <div>
-        <h1>Truc valenciano · prototipo 1 vs 1</h1>
-        <div class="subtitle">Salas por código · tiempo real · sin login · envit i truc</div>
+
+<!-- ═══════════════════════════════════════════════
+     PANTALLA 1: LOBBY
+═══════════════════════════════════════════════ -->
+<div id="screenLobby" class="screen">
+  <div class="lobby-wrap">
+    <div class="lobby-header">
+      <div class="lobby-suits">
+        <span class="ls oros">◉</span>
+        <span class="ls copas">♆</span>
+        <span class="ls espadas">✦</span>
+        <span class="ls bastos">⊕</span>
       </div>
-      <div class="row" style="justify-content:flex-end;">
-        <span id="roomBadge" class="pill neutral">Sala: —</span>
-        <span id="seatBadge" class="pill neutral">Jugador: —</span>
-      </div>
+      <h1>Truc <span class="hi">Valenciano</span></h1>
+      <p class="lobby-sub">Prototipo 1 vs 1</p>
     </div>
 
-    <div class="grid">
-      <aside class="card">
-        <h2 class="section-title">Entrada</h2>
+    <div class="lobby-card">
+      <div class="lfield">
         <label for="nameInput">Tu nombre</label>
-        <input id="nameInput" type="text" placeholder="Ej. Christian" />
-
+        <input id="nameInput" type="text" placeholder="Ej. Vicent" autocomplete="off" />
+      </div>
+      <div class="lfield">
         <label for="roomInput">Código de sala</label>
-        <input id="roomInput" type="text" placeholder="Ej. K7Q2" />
+        <input id="roomInput" type="text" placeholder="Ej. K7Q2" autocomplete="off" maxlength="8" />
+      </div>
+      <div class="lobby-btns">
+        <button id="createBtn" class="lbtn lbtn-primary">Crear sala</button>
+        <button id="joinBtn"   class="lbtn lbtn-secondary">Unirse</button>
+      </div>
+      <div id="lobbyMsg" class="lobby-msg"></div>
+    </div>
 
-        <div class="row" style="margin-top: 12px;">
-          <button id="createBtn" class="good">Crear sala</button>
-          <button id="joinBtn" class="secondary">Entrar</button>
-        </div>
-
-        <div class="checkboxline">
-          <input id="debugReveal" type="checkbox" />
-          <label for="debugReveal" style="margin:0;">Modo prueba: ver las 2 manos</label>
-        </div>
-
-        <div class="sep"></div>
-
-        <div class="stack">
-          <div class="flex-between">
-            <span class="badge accent">Meta: 12 puntos</span>
-            <span class="badge green">Baraja de 40 cartas</span>
-          </div>
-          <div class="mini">
-            Regla asumida para <b>falta</b>: si se acepta, el ganador se lleva lo que le falta al jugador que va ganando para llegar a 12; si se rechaza, el que la cantó suma 1 y la mano sigue o termina según el estado del truc.
-          </div>
-          <button id="dealBtn" class="warn hidden">Repartir nueva mano (host)</button>
-          <button id="leaveBtn" class="ghost hidden">Salir de la sala</button>
-        </div>
-
-        <div id="lobbyMsg" class="msg" style="margin-top:12px;">Crea una sala o entra con un código.</div>
-      </aside>
-
-      <main class="right-actions">
-        <section class="card hidden" id="gameCard">
-          <div class="topstats">
-            <div class="stat">
-              <div class="k">Marcador</div>
-              <div class="v"><span id="score0">0</span> · <span id="score1">0</span></div>
-              <div class="tiny">Primero en llegar a 12 gana</div>
-            </div>
-            <div class="stat">
-              <div class="k">Estado</div>
-              <div class="v" id="stateLabel">—</div>
-              <div class="tiny" id="turnLabel">—</div>
-            </div>
-          </div>
-
-          <div class="row" style="margin-bottom: 10px;">
-            <span class="pill neutral">Mano: <strong id="manoLabel">—</strong></span>
-            <span class="pill neutral">Turno: <strong id="turnSeatLabel">—</strong></span>
-            <span class="pill neutral">Ronda: <strong id="handLabel">0</strong></span>
-          </div>
-
-          <div class="row" style="margin-bottom: 8px;">
-            <span class="pill neutral">Jugador 0: <strong id="player0Name">—</strong></span>
-            <span class="pill neutral">Jugador 1: <strong id="player1Name">—</strong></span>
-          </div>
-
-          <div class="board">
-            <div class="card">
-              <div class="flex-between">
-                <h3 class="section-title" style="margin:0;">Mesa</h3>
-                <span class="tiny" id="currentTrickLabel">—</span>
-              </div>
-              <div id="tableArea" class="tablecards" style="margin-top:10px;"></div>
-            </div>
-
-            <div class="card">
-              <div class="flex-between">
-                <h3 class="section-title" style="margin:0;">Tu mano</h3>
-                <span class="tiny" id="handInfo">—</span>
-              </div>
-              <div id="handArea" class="handrow" style="margin-top:10px;"></div>
-              <div id="hiddenHandNotice" class="mini hidden" style="margin-top:8px;">Las cartas del rival están ocultas.</div>
-            </div>
-
-            <div class="card controls">
-              <div class="flex-between">
-                <h3 class="section-title" style="margin:0;">Acciones</h3>
-                <span class="tiny" id="offerInfo">—</span>
-              </div>
-              <div class="row">
-                <button id="envitBtn" class="good">Envidar</button>
-                <button id="trucBtn" class="warn">Trucar</button>
-                <button id="mazoBtn" class="bad">Irse al mazo</button>
-              </div>
-              <div id="responseButtons" class="row hidden"></div>
-              <div class="mini" id="actionHelp">—</div>
-            </div>
-
-            <div class="card">
-              <div class="flex-between">
-                <h3 class="section-title" style="margin:0;">Bazas</h3>
-                <span class="tiny" id="trickWinsLabel">—</span>
-              </div>
-              <div id="historyArea" class="history" style="margin-top:10px;"></div>
-            </div>
-
-            <div class="card">
-              <div class="flex-between">
-                <h3 class="section-title" style="margin:0;">Registro</h3>
-                <span class="tiny">Estados y movimientos</span>
-              </div>
-              <div id="logArea" class="log" style="margin-top:10px;"></div>
-            </div>
-          </div>
-        </section>
-      </main>
+    <div class="lobby-debug">
+      <label class="chk-line">
+        <input id="debugReveal" type="checkbox" />
+        <span>Modo prueba (ver ambas manos)</span>
+      </label>
     </div>
   </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PANTALLA 2: MESA DE JUEGO
+═══════════════════════════════════════════════ -->
+<div id="screenGame" class="screen hidden">
+
+  <!-- HUD superior -->
+  <div id="hud">
+    <div class="hud-left">
+      <span id="hudRoom" class="hud-pill">—</span>
+      <span id="hudSeat" class="hud-pill">—</span>
+    </div>
+    <div class="hud-score">
+      <span id="hudScore0" class="hud-score-num">0</span>
+      <span class="hud-score-sep">·</span>
+      <span id="hudScore1" class="hud-score-num">0</span>
+    </div>
+    <div class="hud-right">
+      <span id="hudState" class="hud-pill">—</span>
+      <button id="leaveBtn" class="hud-leave">Salir</button>
+    </div>
+  </div>
+
+  <!-- MESA PRINCIPAL -->
+  <div id="table">
+
+    <!-- Zona rival (arriba) -->
+    <div id="rivalZone">
+      <div id="rivalName" class="player-name rival-name">—</div>
+      <div id="rivalCards" class="rival-cards"></div>
+    </div>
+
+    <!-- Centro de la mesa: bazas jugadas -->
+    <div id="centerZone">
+      <div id="trickArea" class="trick-area">
+        <div class="trick-slot" id="trickSlot0"></div>
+        <div class="trick-divider"></div>
+        <div class="trick-slot" id="trickSlot1"></div>
+      </div>
+      <div id="centerInfo" class="center-info"></div>
+    </div>
+
+    <!-- Zona propia (abajo) -->
+    <div id="myZone">
+      <div id="myCards" class="my-cards"></div>
+      <div id="myName" class="player-name my-name">—</div>
+    </div>
+
+  </div>
+
+  <!-- PANEL DE ACCIONES (inferior) -->
+  <div id="actionPanel">
+    <div id="offerMsg" class="offer-msg hidden"></div>
+    <div id="actionBtns" class="action-btns">
+      <button id="envitBtn" class="abtn abtn-green">Envidar</button>
+      <button id="trucBtn"  class="abtn abtn-gold">Trucar</button>
+      <button id="mazoBtn"  class="abtn abtn-red">Ir al mazo</button>
+    </div>
+    <div id="responseArea" class="response-area hidden"></div>
+    <div id="statusMsg" class="status-msg"></div>
+  </div>
+
+  <!-- Info lateral flotante -->
+  <div id="sideInfo">
+    <div class="si-row"><span class="si-lbl">Mano</span><span id="siMano">—</span></div>
+    <div class="si-row"><span class="si-lbl">Ronda</span><span id="siHand">0</span></div>
+    <div class="si-row"><span class="si-lbl">Bazas</span><span id="siBazas">0-0</span></div>
+  </div>
+
+  <!-- Historial colapsable -->
+  <div id="logPanel">
+    <div id="logToggle" class="log-toggle">▸ Registro</div>
+    <div id="logBody" class="log-body hidden">
+      <div id="logArea"></div>
+    </div>
+  </div>
+
+  <!-- Overlay cuenta atrás -->
+  <div id="countdownOverlay" class="hidden">
+    <div id="countdownNum">5</div>
+    <div class="cd-label">Nueva mano en…</div>
+  </div>
+
+  <!-- Overlay fin partida -->
+  <div id="gameOverOverlay" class="hidden">
+    <div class="go-card">
+      <div class="go-title">Partida terminada</div>
+      <div id="goWinner" class="go-winner">—</div>
+      <div id="goScore"  class="go-score">—</div>
+    </div>
+  </div>
+
+</div>
+
 </body>
 </html>
