@@ -249,6 +249,23 @@ h1 .hi { color: var(--gold); }
 /* ══ OVERLAYS ═══════════════════════════ */
 .overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.82); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; }
 .overlay.hidden { display: none !important; }
+
+/* El overlay entre manos NO tapa la mesa — solo muestra el número flotante */
+#countdownOverlay {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  pointer-events: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+}
+#countdownOverlay .overlay-card {
+  background: rgba(11,21,18,.7);
+  backdrop-filter: blur(6px);
+  border-color: rgba(232,171,42,.3);
+  padding: 20px 40px;
+  gap: 6px;
+}
 .overlay-card { background: rgba(255,255,255,.05); border: 1px solid var(--border); border-radius: 24px; padding: 40px 52px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; animation: ovIn .35s cubic-bezier(.2,.8,.3,1) both; }
 @keyframes ovIn { from{opacity:0;transform:scale(.88)} to{opacity:1;transform:scale(1)} }
 
