@@ -35,12 +35,21 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
 }
 #screenLobby::before {
   content: ""; position: absolute; inset: 0;
-  background: rgba(0,0,0,.65); z-index: 0;
+  background: rgba(0,0,0,.68); z-index: 0;
 }
 #screenLobby .lobby-wrap { position: relative; z-index: 1; }
-.lobby-wrap { width: 100%; max-width: 380px; padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; }
+.lobby-wrap {
+  width: 100%; max-width: 360px;
+  padding: 28px 24px;
+  display: flex; flex-direction: column; gap: 20px;
+  background: rgba(10,18,14,.88);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+}
 .lobby-header { text-align: center; }
-.lobby-portada { width: 190px; height: auto; border-radius: 8px; margin-bottom: 4px; display: block; margin-left: auto; margin-right: auto; object-fit: cover; }
+.lobby-portada { width: 200px; height: auto; border-radius: 8px; margin-bottom: 2px; display: block; margin-left: auto; margin-right: auto; object-fit: cover; }
 .ls { opacity: .75; }
 .ls.oros    { color: #c9930a; }
 .ls.copas   { color: #b52828; }
@@ -49,7 +58,7 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
 h1 { font-size: 34px; font-weight: 900; letter-spacing: -1px; color: var(--text); }
 h1 .hi { color: var(--gold); }
 .lobby-sub { font-size: 13px; font-weight: 300; color: var(--muted); margin-top: 4px; }
-.lobby-card { background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; }
+.lobby-card { display: flex; flex-direction: column; }
 .lfield { display: flex; flex-direction: column; margin-bottom: 14px; }
 .lfield label { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 .lfield input { background: rgba(0,0,0,.3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; font: inherit; font-size: 15px; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s; }
@@ -254,7 +263,7 @@ h1 .hi { color: var(--gold); }
 /* ══ OVERLAYS ═══════════════════════════ */
 .overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.82); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; }
 #waitingOverlay { background: url("fondo.jpg") center/cover no-repeat; }
-#waitingOverlay::before { content:""; position:absolute; inset:0; background: rgba(0,0,0,.65); z-index: 0; }
+#waitingOverlay::before { content:""; position:absolute; inset:0; background: rgba(0,0,0,.68); z-index: 0; }
 #waitingOverlay .overlay-card { position:relative; z-index:1; }
 .overlay.hidden { display: none !important; }
 
