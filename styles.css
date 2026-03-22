@@ -494,3 +494,51 @@ h1 .hi { color: var(--gold); }
   min-height: 100dvh !important;
   overflow-y: auto !important;
 }
+
+/* ── LOBBY: smaller on mobile, show bg top+bottom ── */
+@media (max-height: 700px), (max-width: 480px) {
+  .lobby-wrap { max-height: 88vh; overflow-y: auto; padding: 18px 18px; gap: 14px; }
+  .lobby-portada { width: 140px; }
+  h1 { font-size: 26px; }
+}
+
+/* ── FELT TEXTURE on green panels ── */
+.lobby-wrap,
+#waitingOverlay .overlay-card,
+#waitingOverlay .waiting-card {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(0,0,0,.04) 0px, rgba(0,0,0,.04) 1px,
+      transparent 1px, transparent 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(0,0,0,.03) 0px, rgba(0,0,0,.03) 1px,
+      transparent 1px, transparent 4px
+    ) !important;
+}
+
+/* ── WAITING OVERLAY updates ── */
+.waiting-portada { width: 90px; height: auto; border-radius: 8px; display: block; margin: 0 auto 10px; }
+.waiting-code-row { display: flex; align-items: baseline; gap: 8px; justify-content: center; margin: 4px 0; }
+.waiting-code-lbl { font-size: 13px; color: rgba(255,255,255,.6); }
+.waiting-code { font-size: 32px; font-weight: 900; letter-spacing: 4px; color: var(--gold); }
+
+/* ── SCORE SUMMARY in countdown overlay ── */
+.summary-events { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.sum-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+.sum-label { color: var(--text); text-align: left; }
+.sum-pts { color: #7ee787; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+.sum-result { margin-top: 10px; text-align: center; font-size: 15px; font-weight: 700; color: var(--text); border-top: 1px solid rgba(255,255,255,.12); padding-top: 8px; }
+.sum-score { color: var(--gold); font-size: 20px; }
+
+/* ── TURN RING PULSE when it's your turn ── */
+#myTimerRing:not(.hidden) {
+  filter: drop-shadow(0 0 6px rgba(46,160,67,.9));
+  animation: ringPulse 1.4s ease-in-out infinite;
+}
+@keyframes ringPulse {
+  0%,100% { filter: drop-shadow(0 0 4px rgba(46,160,67,.7)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(46,160,67,1)); }
+}
