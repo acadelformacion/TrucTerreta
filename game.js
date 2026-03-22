@@ -227,17 +227,22 @@ function applyHandEnd(state,reason){
     const v1=bestEnvit(fromHObj(h.hands?.[K(1)]));
     const ew=v0>v1?0:v1>v0?1:state.mano;
     const ep=h.envit.acceptedLevel==='falta'?12-Math.max(getScore(state,0),getScore(state,1)):Number(h.envit.acceptedLevel||0);
-    addScore(state,ew,ep);pushLog(state,`Envit: guanya J${ew} (+${ep}).`);if(finish())return;
+    const ewName=state.players?.[K(ew)]?.name||`J${ew}`;
+    addScore(state,ew,ep);pushLog(state,`Envit: guanya ${ewName} (+${ep}).`);if(finish())return;
   }
   for(const s of[0,1]){const pts=getSA(h,s);if(pts>0)addScore(state,s,pts);}
   if(finish())return;
   if(h.truc.state==='accepted'){
     const tw=handWinner(state),tp=Number(h.truc.acceptedLevel||0);
-    addScore(state,tw,tp);pushLog(state,`Truc: guanya J${tw} (+${tp}).`);if(finish())return;
+    const twName=state.players?.[K(tw)]?.name||`J${tw}`;
+    addScore(state,tw,tp);pushLog(state,`Truc: guanya ${twName} (+${tp}).`);if(finish())return;
   }else if(h.truc.state==='none'){
     // Sin truc: +1 al ganador de la mano
     const hw=handWinner(state);
-    if(hw!==null&&hw!==undefined){addScore(state,hw,1);pushLog(state,`Mà guanyada per J${hw} (+1).`);}
+    if(hw!==null&&hw!==undefined){
+      const hwName=state.players?.[K(hw)]?.name||`J${hw}`;
+      addScore(state,hw,1);pushLog(state,`Mà guanyada per ${hwName} (+1).`);
+    }
     if(finish())return;
   }
   if(reason)pushLog(state,reason);
@@ -276,7 +281,9 @@ function resolveTrick(state){
   const handOver=w0>=2||w1>=2||tIdx>=3||(b1Draw&&b2HasWinner);
   if(handOver){
     const hw=handWinner(state);
-    applyHandEnd(state,`Mà: guanya ${_lastState?pName(_lastState,hw):'J'+hw}.`);
+    // hw is 0 or 1 — use state.players directly (we're inside the transaction)
+    const hwName=state.players?.[K(hw)]?.name||`Jugador ${hw}`;
+    applyHandEnd(state,`Mà guanyada per ${hwName}.`);
   }
 }
 
@@ -321,9 +328,14 @@ async function playCard(card){
   try{
     await mutate(state=>{
       const h=state.hand;
-      if(!h||state.status!=='playing'||h.status!=='in_progress'){console.warn('PLAYCARD: bad status',state.status,h?.status);return false;}
-      if(h.mode!=='normal'||h.pendingOffer){console.warn('PLAYCARD: bad mode',h.mode,h.pendingOffer);return false;}
-      if(h.turn!==mySeat){console.warn('PLAYCARD: not my turn',h.turn,'vs mySeat',mySeat);return false;}
+      if(!h||state.status!=='playing'||h.status!=='in_progress')return false;
+      if(h.mode!=='normal'||h.pendingOffer)return false;
+      if(h.turn!==mySeat)return false;
+      // Safety: abort if hand should already be over (b1 draw + b2 winner)
+      const _hist=h.trickHistory||[];
+      const _b1Draw=_hist.length>=1&&_hist[0].winner===null;
+      const _b2Win=_hist.length>=2&&_hist[1].winner!==null;
+      if(_b1Draw&&_b2Win)return false; // hand already decided
       // Guardia: ¿ya jugó en esta baza?
       if(alreadyPlayed(h,mySeat)){console.warn('PLAYCARD: already played');return false;}
       const mine=fromHObj(h.hands?.[K(mySeat)]);
@@ -673,7 +685,7 @@ function renderTrickSnapshot(snapshot){
       const card=seat===0?t.c0:t.c1;
       if(!card||card===EMPTY_CARD)return;
       const el=buildCard(card);
-      el.style.cssText='flex-shrink:0;opacity:0.55;filter:brightness(0.5);';
+      el.style.cssText='flex-shrink:0;opacity:0.85;filter:brightness(0.75);';
       (seat===0?slot0:slot1).appendChild(el);
     });
   });
@@ -738,7 +750,7 @@ function renderTrick(state){
     const last=hist[hist.length-1];
     const msg=document.createElement('div');
     msg.style.cssText='font-size:11px;color:var(--muted);margin-top:4px;text-align:center;';
-    msg.textContent=last.winner===null?'Parda':`Baza ${hist.length}: ${_lastState?pName(_lastState,last.winner):'J'+last.winner} guanya`;
+    if(last.winner===null){msg.textContent='Empat';}else{const wn=_lastState?pName(_lastState,last.winner):'J'+last.winner;msg.textContent=`Baza ${hist.length}: ${wn} guanya`;}
     info.appendChild(msg);
   }
 }
@@ -753,10 +765,11 @@ function renderActions(state){
     $('statusMsg').textContent=state.status==='waiting'?'Esperando…':'Partida terminada';return;}
   const myT=h.turn===mySeat,norm=h.mode==='normal',envDone=h.envit.state!=='none';
   const played=alreadyPlayed(h,mySeat);
-  // Envit: solo antes de que se juegue la primera carta de la 1ª baza
-  const isFirstTrick=getTrickIndex(h)===0;
-  const neitherPlayed=!alreadyPlayed(h,0)&&!alreadyPlayed(h,1);
-  const envitOk=isFirstTrick&&neitherPlayed&&h.envitAvailable&&!envDone;
+  // Envit: SOLO antes de que cualquiera juegue la primera carta de la mano
+  // = ninguna baza resuelta aún + nadie ha jugado carta en esta primera baza
+  const noTricksPlayed=(h.trickHistory||[]).length===0;
+  const noCardPlayedYet=!alreadyPlayed(h,0)&&!alreadyPlayed(h,1);
+  const envitOk=noTricksPlayed&&noCardPlayedYet&&!envDone;
   eB.disabled=!envitOk||!myT||!!h.pendingOffer||(h.mode!=='normal'&&h.mode!=='respond_truc');
   const trucDone=h.truc.state!=='none'; // truc ya en juego
   const trucMaxed=h.pendingOffer?.kind==='truc'&&h.pendingOffer?.level>=4; // ya en val4
