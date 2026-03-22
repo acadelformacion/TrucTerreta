@@ -239,13 +239,16 @@ function applyHandEnd(state,reason){
     const twName=state.players?.[K(tw)]?.name||`J${tw}`;
     addScore(state,tw,tp);pushLog(state,`Truc: guanya ${twName} (+${tp}).`);if(finish())return;
   }else if(h.truc.state==='none'){
-    // Sin truc: +1 al ganador de la mano
-    const hw=handWinner(state);
-    if(hw!==null&&hw!==undefined){
-      const hwName=state.players?.[K(hw)]?.name||`J${hw}`;
-      addScore(state,hw,1);pushLog(state,`Ma guanyada per ${hwName} (+1).`);
+    if(!h.mazo){
+      // Sin truc y sin mazo: +1 al ganador de las bazas
+      const hw=handWinner(state);
+      if(hw!==null&&hw!==undefined){
+        const hwName=state.players?.[K(hw)]?.name||`J${hw}`;
+        addScore(state,hw,1);pushLog(state,`Ma guanyada per ${hwName} (+1).`);
+      }
+      if(finish())return;
     }
-    if(finish())return;
+    // if h.mazo=true, the +1 was already added via scoreAwards, skip here
   }
   if(reason)pushLog(state,reason);
   pushLog(state,`Marcador: ${getScore(state,0)}-${getScore(state,1)}`);
@@ -399,9 +402,22 @@ async function goMazo(){
     const h=state.hand;
     if(!h||state.status!=='playing'||h.status!=='in_progress')return false;
     if(h.turn!==mySeat||h.mode!=='normal'||h.pendingOffer)return false;
-    // Ir al mazo allowed any time it's your turn
-    const w=other(mySeat);addSA(h,w);
-    pushLog(state,`J${mySeat} al mazo. +1 J${w}.`);
+    // Ir al mazo: rival wins the hand
+    const w=other(mySeat);
+    const wName=state.players?.[K(w)]?.name||`J${w}`;
+    h.mazo=true; // flag to skip default +1 in applyHandEnd
+    if(h.truc.state==='accepted'){
+      // Truc was accepted: rival gets the full truc points
+      const tp=Number(h.truc.acceptedLevel||0);
+      addSA(h,w,tp>0?tp:1);
+      pushLog(state,`${wName} guanya +${tp>0?tp:1} (mazo amb truc).`);
+    }else{
+      // No truc: rival gets 1 point
+      addSA(h,w);
+      pushLog(state,`${wName} guanya +1 (mazo).`);
+    }
+    // Override hand winner to be the rival
+    h.mazoWinner=w;
     applyHandEnd(state,'Mazo.');return true;
   });
 }
@@ -449,9 +465,11 @@ async function respondEnvit(choice){
     }
     if(choice==='no_vull'){
       h.envit={state:'rejected',caller,responder:resp,acceptedLevel:0,acceptedBy:null};
-      addSA(h,caller);h.envitAvailable=false;
+      // Points = level of offer being refused (torne=4 -> +2 if refused, envit=2 -> +1)
+      const envitPts=offer.level==='falta'?2:offer.level===4?2:1;
+      addSA(h,caller,envitPts);h.envitAvailable=false;
       const callerName0=state.players?.[K(caller)]?.name||`J${caller}`;
-      pushLog(state,`Envit rebutjat. +1 ${callerName0}.`);resumeOffer(state);return true;
+      pushLog(state,`Envit rebutjat. +${envitPts} ${callerName0}.`);resumeOffer(state);return true;
     }
     if(choice==='torne'){
       if(offer.level!==2)return false;
