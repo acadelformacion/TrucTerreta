@@ -166,11 +166,16 @@
 
   <!-- ── OVERLAY: FIN PARTIDA ── -->
   <div id="gameOverOverlay" class="overlay hidden">
+    <canvas id="confettiCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:99;"></canvas>
     <div class="overlay-card go-card">
-      <div class="ov-title">Partida terminada</div>
+      <div class="ov-title" id="goTitle">Partida terminada</div>
       <div id="goWinner" class="go-winner">—</div>
       <div id="goScore"  class="go-score">—</div>
-      <button id="goLeaveBtn" class="lbtn lbtn-primary" style="margin-top:20px;width:100%;">Salir</button>
+      <div class="go-btns" style="margin-top:20px;display:flex;flex-direction:column;gap:10px;width:100%;">
+        <button id="goRematchBtn" class="lbtn lbtn-primary" style="font-size:16px;padding:14px;">⚔️ Revancha</button>
+        <button id="goLeaveBtn"   class="lbtn lbtn-secondary">Salir</button>
+      </div>
+      <div id="goRematchStatus" class="go-rematch-status"></div>
     </div>
   </div>
 
