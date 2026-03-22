@@ -1,43 +1,66 @@
 // ─── Truc Valenciano · game.js ─────────────────────────────────────────────
-// Firebase convierte {0:x,1:y} en array. Todas las claves de asiento
-// usan prefijo "_" para evitarlo: "_0", "_1".
-// Las manos se guardan como {a,b,c} y las cartas jugadas como {c0,c1}.
-// El campo `played` en currentTrick indica qué asientos ya jugaron carta.
+// Firebase borra nodos vacíos, null y false. Soluciones:
+//   • Claves de asiento: "_0","_1" (no "0","1" → array)
+//   • Manos: objeto {a,b,c} con las cartas
+//   • Cartas jugadas: guardadas en h.played como {p0:"carta",p1:"carta"}
+//     El nodo NUNCA se borra; se resetea con un marcador "~" entre bazas.
+//   • Contadores: almacenados +10 para que nunca sean 0.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, get, set, push, remove, onValue, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey:            "AIzaSyBHQ3hSWToVKzADI9eUlCNONbi_lN_TTAI",
-  authDomain:        "trucvalencia-12345.firebaseapp.com",
-  databaseURL:       "https://trucvalencia-12345-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId:         "trucvalencia-12345",
-  storageBucket:     "trucvalencia-12345.firebasestorage.app",
-  messagingSenderId: "922530958932",
-  appId:             "1:922530958932:web:84fe1d9386f5ea2d6f67c1"
+  apiKey:"AIzaSyBHQ3hSWToVKzADI9eUlCNONbi_lN_TTAI",
+  authDomain:"trucvalencia-12345.firebaseapp.com",
+  databaseURL:"https://trucvalencia-12345-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:"trucvalencia-12345",
+  storageBucket:"trucvalencia-12345.firebasestorage.app",
+  messagingSenderId:"922530958932",
+  appId:"1:922530958932:web:84fe1d9386f5ea2d6f67c1"
 };
 initializeApp(firebaseConfig);
 const db = getDatabase();
 
-// ─── Seat key helpers ─────────────────────────────────────────────────────────
-// Firebase convierte {"0":x,"1":y} → array. Usamos "_0","_1" para evitarlo.
-const K = n => `_${n}`;
-// Manos: array → {a:"carta", b:"carta", c:"carta"}  (nunca claves numéricas)
+// ─── Key helpers ──────────────────────────────────────────────────────────────
+const K  = n => `_${n}`;          // seat: 0→"_0"
+const PK = n => `p${n}`;          // played key: 0→"p0"
 const HKEYS = ['a','b','c'];
-const toHObj  = arr => Object.fromEntries((arr||[]).filter(Boolean).map((c,i)=>[HKEYS[i],c]));
-const fromHObj= obj => {
-  if(!obj||typeof obj!=='object')return[];
-  if(Array.isArray(obj))return obj.filter(Boolean);
-  return HKEYS.map(k=>obj[k]).filter(Boolean);
+const EMPTY_CARD = '~';            // marcador "no jugada" (valor no válido)
+
+const toHObj = arr => {
+  const o = {};
+  (arr||[]).filter(c=>c&&c!==EMPTY_CARD).forEach((c,i)=>{ o[HKEYS[i]]=c; });
+  // Siempre al menos un campo para que Firebase no borre el nodo
+  if(!Object.keys(o).length) o.x = EMPTY_CARD;
+  return o;
 };
-// Cartas jugadas en la baza: clave "c0" o "c1"  (nunca "0","1")
-const CK = seat => `c${seat}`;
+const fromHObj = obj => {
+  if(!obj||typeof obj!=='object') return [];
+  if(Array.isArray(obj)) return obj.filter(c=>c&&c!==EMPTY_CARD);
+  return HKEYS.map(k=>obj[k]).filter(c=>c&&c!==EMPTY_CARD);
+};
+
+// played: {p0:"1_oros", p1:"~"} — "~" = no jugó, string de carta = sí jugó
+const getPlayed = (h, seat) => {
+  const v = h?.played?.[PK(seat)];
+  return (v && v !== EMPTY_CARD) ? v : null;
+};
+const setPlayed = (h, seat, card) => {
+  if(!h.played) h.played = {[PK(0)]:EMPTY_CARD, [PK(1)]:EMPTY_CARD};
+  h.played[PK(seat)] = card || EMPTY_CARD;
+};
+const resetPlayed = (h) => {
+  h.played = {[PK(0)]:EMPTY_CARD, [PK(1)]:EMPTY_CARD};
+};
+const alreadyPlayed = (h, seat) => getPlayed(h, seat) !== null;
+const bothPlayed    = (h) => alreadyPlayed(h,0) && alreadyPlayed(h,1);
 
 const LS = { room:'truc_room', seat:'truc_seat', name:'truc_name' };
-const INACT_MS    = 60*60*1000;
-const TURN_SECS   = 30;
+const INACT_MS  = 60*60*1000;
+const TURN_SECS = 30;
+const OFFSET    = 10; // scores/trickWins stored +10
 
-// ─── Suit SVGs ────────────────────────────────────────────────────────────────
+// ─── SVG palos ────────────────────────────────────────────────────────────────
 const SUIT_SVG = {
   oros:`<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12" stroke="currentColor" stroke-width="2" fill="rgba(176,125,16,.1)"/><circle cx="16" cy="16" r="7" stroke="currentColor" stroke-width="1.5" fill="rgba(176,125,16,.15)"/><circle cx="16" cy="16" r="3" fill="currentColor"/></svg>`,
   copas:`<svg viewBox="0 0 32 36" fill="none"><path d="M8 5 Q8 15 16 17 Q24 15 24 5 Z" stroke="currentColor" stroke-width="1.8" fill="rgba(181,42,42,.1)" stroke-linejoin="round"/><path d="M11 17 Q11 22 13.5 23.5 L13.5 28 M18.5 23.5 Q21 22 21 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M10 28 L22 28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
@@ -46,7 +69,7 @@ const SUIT_SVG = {
 };
 const SUITS={oros:{label:'oros',cls:'s-oros'},copas:{label:'copas',cls:'s-copas'},espadas:{label:'espadas',cls:'s-espadas'},bastos:{label:'bastos',cls:'s-bastos'}};
 const SUIT_ORDER=['oros','copas','espadas','bastos'];
-const TRICK_ORDER_GROUPS=[
+const TRG=[
   ['1_espadas'],['1_bastos'],['7_espadas'],['7_oros'],
   ['3_oros','3_copas','3_espadas','3_bastos'],['2_oros','2_copas','2_espadas','2_bastos'],
   ['1_oros','1_copas'],
@@ -55,7 +78,7 @@ const TRICK_ORDER_GROUPS=[
   ['6_oros','6_copas','6_espadas','6_bastos'],['5_oros','5_copas','5_espadas','5_bastos'],
   ['4_oros','4_copas','4_espadas','4_bastos']
 ];
-const TRICK_RANK=(()=>{const m={};let s=100;for(const g of TRICK_ORDER_GROUPS){for(const c of g)m[c]=s;s-=10;}return m;})();
+const TR=(()=>{const m={};let s=100;for(const g of TRG){for(const c of g)m[c]=s;s-=10;}return m;})();
 
 // ─── Audio ────────────────────────────────────────────────────────────────────
 let _ac=null;
@@ -72,7 +95,7 @@ let unsubGame=null,unsubChat=null;
 let inactTimer=null,betweenTimer=null,turnTimer=null;
 let prevTurnKey='',prevEnvSt='none',prevTrucSt='none';
 let chatOpen=false,lastChatN=0;
-let cardLocked=false; // flag local para evitar doble click mientras la transacción viaja
+let uiLocked=false; // bloqueo visual inmediato
 
 const $=id=>document.getElementById(id);
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -81,10 +104,11 @@ const sanitize=s=>String(s||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').sl
 const normName=s=>String(s||'').trim().slice(0,24)||'Invitado';
 const other=s=>s===0?1:0;
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const real=n=>Number(n||OFFSET)-OFFSET; // decode stored value
 
 function parseCard(c){const[n,s]=String(c).split('_');return{num:Number(n),suit:s};}
-function cardLabel(c){const{num,suit}=parseCard(c);return`${num} de ${SUITS[suit]?.label||suit}`;}
-function trickRank(c){return TRICK_RANK[c]??0;}
+function cardLabel(c){const{num,suit}=parseCard(c);return`${num} de ${SUITS[suit]?.label}`;}
+function trickRank(c){return TR[c]??0;}
 function cmpTrick(a,b){const d=trickRank(a)-trickRank(b);return d>0?1:d<0?-1:0;}
 function envitVal(c){const n=parseCard(c).num;return n>=10?0:n;}
 function bestEnvit(cards){
@@ -97,17 +121,19 @@ function bestEnvit(cards){
 }
 function pName(st,seat){return st?.players?.[K(seat)]?.name||`Jugador ${seat}`;}
 function bothReady(st){return !!(st?.players?.[K(0)]&&st?.players?.[K(1)]);}
-function getScore(st,seat){return Number(st?.scores?.[K(seat)]||0);}
-function addScore(st,seat,pts){if(!st.scores)st.scores={[K(0)]:0,[K(1)]:0};st.scores[K(seat)]=(Number(st.scores[K(seat)]||0))+pts;}
+function getScore(st,seat){return real(st?.scores?.[K(seat)]);}
+function addScore(st,seat,pts){if(!st.scores)st.scores={[K(0)]:OFFSET,[K(1)]:OFFSET};st.scores[K(seat)]=(Number(st.scores[K(seat)]||OFFSET))+pts;}
+function getTW(h,seat){return real(h?.trickWins?.[K(seat)]);}
+function addTW(h,seat){h.trickWins[K(seat)]=(Number(h.trickWins[K(seat)]||OFFSET))+1;}
+function getSA(h,seat){return real(h?.scoreAwards?.[K(seat)]);}
+function addSA(h,seat,n=1){h.scoreAwards[K(seat)]=(Number(h.scoreAwards[K(seat)]||OFFSET))+n;}
 function pushLog(st,text){st.logs=st.logs||[];st.logs.unshift({text,at:Date.now()});st.logs=st.logs.slice(0,30);}
 
 function loadLS(){
   const n=localStorage.getItem(LS.name),r=localStorage.getItem(LS.room),s=localStorage.getItem(LS.seat);
   if(n)$('nameInput').value=n;if(r)$('roomInput').value=r;if(s!=null)mySeat=Number(s);
 }
-function saveLS(name,code,seat){
-  localStorage.setItem(LS.name,name||'');localStorage.setItem(LS.room,code||'');localStorage.setItem(LS.seat,String(seat));
-}
+function saveLS(n,c,s){localStorage.setItem(LS.name,n||'');localStorage.setItem(LS.room,c||'');localStorage.setItem(LS.seat,String(s));}
 function resetInactivity(){
   clearTimeout(inactTimer);
   inactTimer=setTimeout(async()=>{if(roomRef)try{await remove(roomRef);}catch(e){}
@@ -116,44 +142,40 @@ function resetInactivity(){
 
 // ─── Default state ────────────────────────────────────────────────────────────
 function defaultState(){
-  return{version:5,status:'waiting',roomCode:'',
-    players:{[K(0)]:null,[K(1)]:null},scores:{[K(0)]:0,[K(1)]:0},
-    handNumber:0,mano:0,turn:0,hand:null,logs:[],winner:null};
+  return{version:7,status:'waiting',roomCode:'',
+    players:{[K(0)]:null,[K(1)]:null},
+    scores:{[K(0)]:OFFSET,[K(1)]:OFFSET},
+    handNumber:OFFSET,mano:0,turn:0,hand:null,logs:[],winner:null};
 }
+
 function buildDeck(){const c=[],n=[1,2,3,4,5,6,7,10,11,12];for(const s of SUIT_ORDER)for(const x of n)c.push(`${x}_${s}`);return c;}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
-// ─── currentTrick helpers ─────────────────────────────────────────────────────
-// `played` es un objeto {_0:true, _1:true} que indica quién ya jugó carta.
-// Nunca usamos array para esto porque Firebase lo convertiría.
-function hasPlayed(h,seat){return !!(h.currentTrick?.played?.[K(seat)]);}
-function cardOnTable(h,seat){return h.currentTrick?.cards?.[CK(seat)]||null;}
-function bothPlayed(h){return hasPlayed(h,0)&&hasPlayed(h,1);}
-
+// ─── Hand factory ─────────────────────────────────────────────────────────────
 function makeHand(mano){
   const deck=shuffle(buildDeck());
   return{
-    status:'in_progress',mano,turn:mano,mode:'normal',
-    envitAvailable:true,pendingOffer:null,resume:null,
+    status:'in_progress', mano, turn:mano, mode:'normal',
+    envitAvailable:true, pendingOffer:null, resume:null,
     hands:{[K(0)]:toHObj(deck.slice(0,3)),[K(1)]:toHObj(deck.slice(3,6))},
-    currentTrick:{
-      cards:{[CK(0)]:null,[CK(1)]:null},   // null = no jugada aún
-      played:{[K(0)]:false,[K(1)]:false},   // booleano por asiento
-      lead:mano
-    },
-    trickIndex:0,
-    trickWins:{[K(0)]:0,[K(1)]:0},
+    // played: siempre presente con EMPTY_CARD para que Firebase no lo borre
+    played:{[PK(0)]:EMPTY_CARD,[PK(1)]:EMPTY_CARD},
+    trickLead:mano,
+    trickIndex:OFFSET,  // stored +OFFSET
+    trickWins:{[K(0)]:OFFSET,[K(1)]:OFFSET},
     trickHistory:[],
-    scoreAwards:{[K(0)]:0,[K(1)]:0},
+    scoreAwards:{[K(0)]:OFFSET,[K(1)]:OFFSET},
     envit:{state:'none',caller:null,responder:null,acceptedLevel:0,acceptedBy:null},
     truc:{state:'none',caller:null,responder:null,acceptedLevel:0,acceptedBy:null}
   };
 }
 
+function getTrickIndex(h){return real(h?.trickIndex);}
+
 // ─── Game logic ───────────────────────────────────────────────────────────────
 function handWinner(state){
   const h=state.hand;
-  const w0=Number(h.trickWins?.[K(0)]||0),w1=Number(h.trickWins?.[K(1)]||0);
+  const w0=getTW(h,0),w1=getTW(h,1);
   if(w0>=2)return 0;if(w1>=2)return 1;
   const hist=h.trickHistory||[];if(hist.length<3)return state.mano;
   const r1=hist[0]?.winner??null,r2=hist[1]?.winner??null,r3=hist[2]?.winner??null;
@@ -165,17 +187,21 @@ function handWinner(state){
 function applyHandEnd(state,reason){
   const h=state.hand;if(!h)return;
   const finish=()=>{
-    if(getScore(state,0)>=12||getScore(state,1)>=12){
-      state.status='game_over';state.winner=getScore(state,0)>getScore(state,1)?0:getScore(state,1)>getScore(state,0)?1:state.mano;state.hand=null;return true;
+    const s0=getScore(state,0),s1=getScore(state,1);
+    if(s0>=12||s1>=12){
+      state.status='game_over';
+      state.winner=s0>s1?0:s1>s0?1:state.mano;
+      state.hand=null;return true;
     }return false;
   };
   if(h.envit.state==='accepted'){
-    const v0=bestEnvit(fromHObj(h.hands?.[K(0)]));const v1=bestEnvit(fromHObj(h.hands?.[K(1)]));
+    const v0=bestEnvit(fromHObj(h.hands?.[K(0)]));
+    const v1=bestEnvit(fromHObj(h.hands?.[K(1)]));
     const ew=v0>v1?0:v1>v0?1:state.mano;
     const ep=h.envit.acceptedLevel==='falta'?12-Math.max(getScore(state,0),getScore(state,1)):Number(h.envit.acceptedLevel||0);
     addScore(state,ew,ep);pushLog(state,`Envit: guanya J${ew} (+${ep}).`);if(finish())return;
   }
-  for(const s of[0,1]){const pts=Number(h.scoreAwards?.[K(s)]||0);if(pts)addScore(state,s,pts);}
+  for(const s of[0,1]){const pts=getSA(h,s);if(pts>0)addScore(state,s,pts);}
   if(finish())return;
   if(h.truc.state==='accepted'){
     const tw=handWinner(state),tp=Number(h.truc.acceptedLevel||0);
@@ -185,26 +211,26 @@ function applyHandEnd(state,reason){
   pushLog(state,`Marcador: ${getScore(state,0)}–${getScore(state,1)}`);
   state.mano=other(state.mano);state.turn=state.mano;
   state.status='waiting';state.hand=null;
-  state.handNumber=Number(state.handNumber||0)+1;
+  state.handNumber=(Number(state.handNumber||OFFSET))+1;
 }
 
 function resolveTrick(state){
   const h=state.hand;
-  const c0=cardOnTable(h,0);const c1=cardOnTable(h,1);
+  const c0=getPlayed(h,0),c1=getPlayed(h,1);
   let w=null;
   if(c0&&c1){const cmp=cmpTrick(c0,c1);w=cmp>0?0:cmp<0?1:null;}
-  h.trickHistory.push({index:h.trickIndex+1,cards:{c0,c1},winner:w,lead:h.currentTrick?.lead??state.mano});
-  if(w!==null){h.trickWins[K(w)]=(Number(h.trickWins[K(w)]||0))+1;h.turn=w;pushLog(state,`Baza ${h.trickIndex+1}: guanya J${w}.`);}
-  else{h.turn=h.currentTrick?.lead??state.mano;pushLog(state,`Baza ${h.trickIndex+1}: parda.`);}
-  // Reset: null explícito para cartas, false para played
-  h.currentTrick={
-    cards:{[CK(0)]:null,[CK(1)]:null},
-    played:{[K(0)]:false,[K(1)]:false},
-    lead:h.turn
-  };
-  h.trickIndex+=1;h.mode='normal';
-  const w0=Number(h.trickWins[K(0)]||0),w1=Number(h.trickWins[K(1)]||0);
-  if(w0>=2||w1>=2||h.trickIndex>=3)applyHandEnd(state,`Mà: guanya J${handWinner(state)}.`);
+  const idx=getTrickIndex(h);
+  const lead=h.trickLead??state.mano;
+  h.trickHistory=(h.trickHistory||[]).concat([{i:idx+1,c0,c1,winner:w,lead}]);
+  if(w!==null){addTW(h,w);h.turn=w;pushLog(state,`Baza ${idx+1}: guanya J${w}.`);}
+  else{h.turn=lead;pushLog(state,`Baza ${idx+1}: parda.`);}
+  h.trickLead=h.turn;
+  h.trickIndex=(Number(h.trickIndex||OFFSET))+1;
+  // RESET played con EMPTY_CARD — nunca borramos el nodo
+  resetPlayed(h);
+  h.mode='normal';
+  const w0=getTW(h,0),w1=getTW(h,1);
+  if(w0>=2||w1>=2||getTrickIndex(h)>=3)applyHandEnd(state,`Mà: guanya J${handWinner(state)}.`);
 }
 
 function resumeOffer(state){
@@ -214,7 +240,7 @@ function resumeOffer(state){
   h.resume=null;
 }
 
-// ─── Firebase wrapper ─────────────────────────────────────────────────────────
+// ─── Firebase ─────────────────────────────────────────────────────────────────
 async function mutate(fn){
   if(!roomRef)return null;
   try{
@@ -236,36 +262,32 @@ async function dealHand(){
     if(state.status==='game_over')return false;
     if(state.hand?.status==='in_progress')return false;
     state.hand=makeHand(state.mano);state.status='playing';
-    pushLog(state,`Mà #${Number(state.handNumber||0)+1}. Torn: J${state.mano}.`);
+    pushLog(state,`Mà #${real(state.handNumber)+1}. Torn: J${state.mano}.`);
     return true;
   });
 }
 
 async function playCard(card){
-  if(cardLocked){console.warn('cardLocked, ignoring');return;}
-  cardLocked=true;
+  if(uiLocked)return;
+  uiLocked=true;
+  document.querySelectorAll('#myCards .my-card-wrap').forEach(w=>w.classList.remove('playable'));
   try{
     await mutate(state=>{
       const h=state.hand;
       if(!h||state.status!=='playing'||h.status!=='in_progress')return false;
-      // Comprobar con el campo `played` — no con `h.turn`
-      if(hasPlayed(h,mySeat)){console.warn('J'+mySeat+' ya jugó esta baza');return false;}
       if(h.mode!=='normal'||h.pendingOffer)return false;
+      // Guardia: ¿ya jugó en esta baza?
+      if(alreadyPlayed(h,mySeat))return false;
       const mine=fromHObj(h.hands?.[K(mySeat)]);
       if(!mine.includes(card))return false;
-      // Quitar carta de la mano
+      // Actualizar mano
       h.hands[K(mySeat)]=toHObj(mine.filter(c=>c!==card));
-      // Marcar como jugado
-      if(!h.currentTrick.played)h.currentTrick.played={[K(0)]:false,[K(1)]:false};
-      if(!h.currentTrick.cards)h.currentTrick.cards={[CK(0)]:null,[CK(1)]:null};
-      h.currentTrick.played[K(mySeat)]=true;
-      h.currentTrick.cards[CK(mySeat)]=card;
+      // Registrar carta jugada (NUNCA borramos played, solo sobreescribimos)
+      setPlayed(h,mySeat,card);
       h.envitAvailable=false;
       pushLog(state,`J${mySeat} juga ${cardLabel(card)}.`);
-      // Dar turno al otro para jugar (o esperar)
       h.turn=other(mySeat);
-      // ¿Ya jugaron los dos?
-      if(hasPlayed(h,other(mySeat))){
+      if(alreadyPlayed(h,other(mySeat))){
         resolveTrick(state);
       }else{
         h.envitAvailable=true;
@@ -273,8 +295,7 @@ async function playCard(card){
       return true;
     });
   }finally{
-    // Desbloquear tras un pequeño delay para que Firebase actualice el estado
-    setTimeout(()=>{cardLocked=false;},600);
+    setTimeout(()=>{uiLocked=false;},800);
   }
 }
 
@@ -283,9 +304,8 @@ async function goMazo(){
     const h=state.hand;
     if(!h||state.status!=='playing'||h.status!=='in_progress')return false;
     if(h.turn!==mySeat||h.mode!=='normal'||h.pendingOffer)return false;
-    if(h.trickIndex!==0||hasPlayed(h,0)||hasPlayed(h,1))return false;
-    const w=other(mySeat);
-    h.scoreAwards[K(w)]=(Number(h.scoreAwards?.[K(w)]||0))+1;
+    if(getTrickIndex(h)!==0||alreadyPlayed(h,0)||alreadyPlayed(h,1))return false;
+    const w=other(mySeat);addSA(h,w);
     pushLog(state,`J${mySeat} al mazo. +1 J${w}.`);
     applyHandEnd(state,'Mazo.');return true;
   });
@@ -328,9 +348,8 @@ async function respondEnvit(choice){
     }
     if(choice==='no_vull'){
       h.envit={state:'rejected',caller,responder:resp,acceptedLevel:0,acceptedBy:null};
-      h.scoreAwards[K(caller)]=(Number(h.scoreAwards?.[K(caller)]||0))+1;
-      h.envitAvailable=false;pushLog(state,`Envit rebutjat. +1 J${caller}.`);
-      resumeOffer(state);return true;
+      addSA(h,caller);h.envitAvailable=false;
+      pushLog(state,`Envit rebutjat. +1 J${caller}.`);resumeOffer(state);return true;
     }
     if(choice==='torne'){
       if(offer.level!==2)return false;
@@ -360,8 +379,8 @@ async function respondTruc(choice){
     }
     if(choice==='no_vull'){
       h.truc={state:'rejected',caller,responder:resp,acceptedLevel:0,acceptedBy:null};
-      h.scoreAwards[K(caller)]=(Number(h.scoreAwards?.[K(caller)]||0))+1;
-      h.envitAvailable=false;pushLog(state,`Truc rebutjat. +1 J${caller}. Mà perduda.`);
+      addSA(h,caller);h.envitAvailable=false;
+      pushLog(state,`Truc rebutjat. +1 J${caller}. Mà perduda.`);
       applyHandEnd(state,'No vull al truc.');return true;
     }
     if(choice==='retruque'){
@@ -371,8 +390,7 @@ async function respondTruc(choice){
       pushLog(state,'Retruque a 3.');return true;
     }
     if(choice==='val4'){
-      // Val 4 solo permite responder al retruque (level 3)
-      if(offer.level!==3)return false;
+      if(offer.level!==3)return false; // Solo tras retruque
       h.pendingOffer={kind:'truc',level:4,by:resp,to:caller};
       h.turn=caller;h.mode='respond_truc';h.envitAvailable=true;
       pushLog(state,'Val 4 al truc.');return true;
@@ -381,34 +399,27 @@ async function respondTruc(choice){
   });
 }
 
-// Timeout: si se acaba el tiempo, el jugador pierde la mà completa
 async function timeoutTurn(){
   await mutate(state=>{
     const h=state.hand;
     if(!h||state.status!=='playing'||h.status!=='in_progress')return false;
-    // Solo actuamos si es realmente nuestro turno y no hemos jugado ya
-    if(h.turn!==mySeat&&!hasPlayed(h,other(mySeat)))return false;
-    // Si hay oferta pendiente que nos toca responder → rechazar automáticamente
+    if(h.turn!==mySeat&&!alreadyPlayed(h,other(mySeat)))return false;
     if(h.pendingOffer?.to===mySeat){
       if(h.pendingOffer.kind==='envit'){
         h.envit={state:'rejected',caller:h.pendingOffer.by,responder:mySeat,acceptedLevel:0,acceptedBy:null};
-        h.scoreAwards[K(h.pendingOffer.by)]=(Number(h.scoreAwards?.[K(h.pendingOffer.by)]||0))+1;
-        h.envitAvailable=false;pushLog(state,'Temps. Envit rebutjat auto.');resumeOffer(state);return true;
+        addSA(h,h.pendingOffer.by);h.envitAvailable=false;
+        pushLog(state,'Temps. Envit rebutjat auto.');resumeOffer(state);return true;
       }
       if(h.pendingOffer.kind==='truc'){
-        // Pierde la mano completa
-        h.scoreAwards[K(h.pendingOffer.by)]=(Number(h.scoreAwards?.[K(h.pendingOffer.by)]||0))+1;
+        addSA(h,h.pendingOffer.by);
         pushLog(state,`J${mySeat} perd la mà per temps.`);
-        applyHandEnd(state,'Temps exhaurit. Mà perduda.');return true;
+        applyHandEnd(state,'Temps exhaurit.');return true;
       }
     }
-    // Si toca jugar carta → pierde la mano completa
-    if(!hasPlayed(h,mySeat)&&h.mode==='normal'){
-      // El rival gana la mà
-      const w=other(mySeat);
-      h.scoreAwards[K(w)]=(Number(h.scoreAwards?.[K(w)]||0))+1;
+    if(!alreadyPlayed(h,mySeat)&&h.mode==='normal'){
+      addSA(h,other(mySeat));
       pushLog(state,`J${mySeat} perd la mà per temps.`);
-      applyHandEnd(state,'Temps exhaurit. Mà perduda.');return true;
+      applyHandEnd(state,'Temps exhaurit.');return true;
     }
     return false;
   });
@@ -422,8 +433,7 @@ function stopTurnTimer(){
 }
 function startTurnTimer(active){
   stopTurnTimer();
-  const f=$('turnTimerFill');if(!f)return;
-  if(!active){return;}
+  const f=$('turnTimerFill');if(!f||!active)return;
   let rem=TURN_SECS;f.style.transition='none';f.style.width='100%';
   setTimeout(()=>{
     f.style.transition='width 1s linear';
@@ -480,7 +490,7 @@ function animatePlay(cardEl,card,onDone){
   fly.addEventListener('animationend',()=>{fly.remove();if(onDone)onDone();},{once:true});
 }
 
-// ─── Render functions ─────────────────────────────────────────────────────────
+// ─── Render ───────────────────────────────────────────────────────────────────
 function renderRivalCards(handObj){
   const z=$('rivalCards');z.innerHTML='';
   const cards=fromHObj(handObj);const n=cards.length;
@@ -490,22 +500,19 @@ function renderRivalCards(handObj){
 
 function renderMyCards(state){
   const h=state.hand,z=$('myCards');z.innerHTML='';if(!h)return;
-  const cards=fromHObj(h.hands?.[K(mySeat)]);
-  // *** CLAVE: usar `played` no `turn` para bloquear cartas ***
-  // Las cartas son jugables si NO hemos jugado aún en esta baza, es modo normal, y no hay oferta pendiente
-  const alreadyPlayed=hasPlayed(h,mySeat);
-  const canPlay=!alreadyPlayed&&h.mode==='normal'&&!h.pendingOffer&&state.status==='playing'&&h.status==='in_progress'&&!cardLocked;
-  cards.forEach(card=>{
+  const myCards=fromHObj(h.hands?.[K(mySeat)]);
+  // Jugable si NO hemos jugado aún en esta baza
+  const played=alreadyPlayed(h,mySeat);
+  const canPlay=!played&&!uiLocked&&h.mode==='normal'&&!h.pendingOffer&&state.status==='playing'&&h.status==='in_progress';
+  myCards.forEach(card=>{
     const wrap=document.createElement('div');wrap.className='my-card-wrap deal-anim';
     const cel=buildCard(card);wrap.appendChild(cel);
     if(canPlay){
       wrap.classList.add('playable');
       wrap.addEventListener('click',()=>{
-        if(cardLocked||!wrap.classList.contains('playable'))return;
-        // Bloquear TODAS las cartas inmediatamente
+        if(uiLocked||!wrap.classList.contains('playable'))return;
         z.querySelectorAll('.my-card-wrap').forEach(w=>w.classList.remove('playable'));
-        sndCard();
-        animatePlay(cel,card,()=>playCard(card));
+        sndCard();animatePlay(cel,card,()=>playCard(card));
       },{once:true});
     }
     z.appendChild(wrap);
@@ -516,7 +523,7 @@ function renderTrick(state){
   $('trickSlot0').innerHTML='';$('trickSlot1').innerHTML='';
   const h=state.hand;if(!h)return;
   [0,1].forEach(seat=>{
-    const card=cardOnTable(h,seat);
+    const card=getPlayed(h,seat);
     if(card){const el=buildCard(card);el.classList.add('land-anim');$(`trickSlot${seat}`).appendChild(el);}
   });
   const info=$('centerInfo');info.innerHTML='';
@@ -543,10 +550,10 @@ function renderActions(state){
   if(!playing){eB.disabled=true;tB.disabled=true;mB.disabled=true;
     $('statusMsg').textContent=state.status==='waiting'?'Esperando…':'Partida terminada';return;}
   const myT=h.turn===mySeat,norm=h.mode==='normal',envDone=h.envit.state!=='none';
-  const alreadyPlayed=hasPlayed(h,mySeat);
-  eB.disabled=alreadyPlayed||!myT||!h.envitAvailable||envDone||!!h.pendingOffer||(h.mode!=='normal'&&h.mode!=='respond_truc');
-  tB.disabled=alreadyPlayed||!myT||!norm||!!h.pendingOffer;
-  mB.disabled=alreadyPlayed||!myT||!norm||!!h.pendingOffer||h.trickIndex!==0||hasPlayed(h,0)||hasPlayed(h,1);
+  const played=alreadyPlayed(h,mySeat);
+  eB.disabled=played||!myT||!h.envitAvailable||envDone||!!h.pendingOffer||(h.mode!=='normal'&&h.mode!=='respond_truc');
+  tB.disabled=played||!myT||!norm||!!h.pendingOffer;
+  mB.disabled=played||!myT||!norm||!!h.pendingOffer||getTrickIndex(h)!==0||alreadyPlayed(h,0)||alreadyPlayed(h,1);
   if(h.pendingOffer&&h.turn===mySeat){
     om.textContent=h.pendingOffer.kind==='envit'
       ?(h.pendingOffer.level==='falta'?'Envit de falta':h.pendingOffer.level===4?'Torne (4)':'Envit')
@@ -565,10 +572,10 @@ function renderActions(state){
     }
   }
   const sm=$('statusMsg');
-  if(alreadyPlayed&&!bothPlayed(h))sm.textContent=`Esperando a que ${pName(state,other(mySeat))} juegue…`;
+  if(played&&!bothPlayed(h))sm.textContent=`Esperando a ${pName(state,other(mySeat))}…`;
   else if(h.pendingOffer&&h.turn!==mySeat)sm.textContent=`Esperando a ${pName(state,h.turn)}…`;
-  else if(!myT&&!alreadyPlayed)sm.textContent=`Turno de ${pName(state,h.turn)}`;
-  else if(!alreadyPlayed&&norm&&!h.pendingOffer)sm.textContent='Tu turno — elige carta o acción';
+  else if(!myT&&!played)sm.textContent=`Turno de ${pName(state,h.turn)}`;
+  else if(!played&&norm&&!h.pendingOffer)sm.textContent='Tu turno — elige carta o acción';
   else sm.textContent='';
 }
 
@@ -579,9 +586,9 @@ function renderHUD(state){
   $('hudScore1').textContent=String(getScore(state,1));
   $('hudState').textContent=state.status==='waiting'?'Esperando':state.status==='playing'?'En juego':'Terminada';
   $('siMano').textContent=`J${state.mano}${state.mano===mySeat?' (tú)':''}`;
-  $('siHand').textContent=String(state.handNumber??0);
+  $('siHand').textContent=String(real(state.handNumber||OFFSET));
   const tw=state.hand?.trickWins;
-  $('siBazas').textContent=tw?`${Number(tw[K(0)])||0}-${Number(tw[K(1)])||0}`:'0-0';
+  $('siBazas').textContent=tw?`${getTW(state.hand,0)}-${getTW(state.hand,1)}`:'0-0';
 }
 
 function renderLog(state){
@@ -619,17 +626,12 @@ function renderAll(room){
 
   if(state.status==='waiting'){
     stopTurnTimer();
-    if(state.handNumber===0){
+    if(real(state.handNumber||OFFSET)===0){
       stopBetween();
       $('waitingCode').textContent=roomCode||'—';
-      $('waitingStatus').textContent=ready
-        ?`${pName(state,0)} i ${pName(state,1)} llestos`
-        :'Esperant el segon jugador…';
-      // Solo el creador (seat 0) ve el botón de inicio
+      $('waitingStatus').textContent=ready?`${pName(state,0)} i ${pName(state,1)} llestos`:'Esperant el segon jugador…';
       $('startBtn').classList.toggle('hidden',!(mySeat===0&&ready));
-      $('waitingNote').textContent=mySeat===0
-        ?'Prem Iniciar quan els dos estigueu a punt'
-        :'Esperant que el creador inici la partida…';
+      $('waitingNote').textContent=mySeat===0?'Prem Iniciar quan els dos estigueu a punt':'Esperant que el creador inici la partida…';
       $('waitingOverlay').classList.remove('hidden');
     }else{
       $('waitingOverlay').classList.add('hidden');
@@ -637,19 +639,13 @@ function renderAll(room){
     }
     return;
   }
-
   $('waitingOverlay').classList.add('hidden');stopBetween();
 
   const h=state.hand;
   if(h){
-    // El timer corre solo si es tu turno Y no has jugado carta aún
-    const myActiveTimerTurn=(h.turn===mySeat&&!hasPlayed(h,mySeat)&&h.mode==='normal'&&!h.pendingOffer)||
-                            (h.pendingOffer?.to===mySeat);
-    const tk=`${state.handNumber}-${h.trickIndex}-${h.turn}-${h.mode}-${hasPlayed(h,mySeat)}`;
-    if(tk!==prevTurnKey){
-      startTurnTimer(myActiveTimerTurn&&h.status==='in_progress');
-      prevTurnKey=tk;
-    }
+    const myTurn=(h.turn===mySeat&&!alreadyPlayed(h,mySeat)&&h.mode==='normal'&&!h.pendingOffer)||h.pendingOffer?.to===mySeat;
+    const tk=`${real(state.handNumber)}-${getTrickIndex(h)}-${h.turn}-${h.mode}-${alreadyPlayed(h,mySeat)?1:0}`;
+    if(tk!==prevTurnKey){startTurnTimer(myTurn&&h.status==='in_progress');prevTurnKey=tk;}
   }
 }
 
@@ -691,7 +687,7 @@ async function createRoom(){
   const name=normName($('nameInput').value);
   const code=sanitize($('roomInput').value)||Math.random().toString(36).slice(2,6).toUpperCase();
   const r=ref(db,`rooms/${code}`);
-  const ex=await get(r);if(ex.exists()){setLobbyMsg('Sala ja existeix. Usa Unirse.','err');return;}
+  const ex=await get(r);if(ex.exists()){setLobbyMsg('Sala ja existeix.','err');return;}
   const init=defaultState();init.roomCode=code;
   init.players[K(0)]={name,clientId:uid()};
   init.logs=[{text:`Sala creada per ${name}.`,at:Date.now()}];
