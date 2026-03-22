@@ -440,13 +440,19 @@ async function startOffer(kind){
     }
     if(kind==='truc'){
       if(h.mode!=='normal')return false;
-      // Truc only available when truc has never happened
-      if(h.truc.state!=='none')return false;
+      let nextLevel=2;
+      if(h.truc.state==='accepted'){
+        // Only the player who accepted can escalate
+        if(h.truc.acceptedBy!==mySeat)return false;
+        nextLevel=Number(h.truc.acceptedLevel||2)+1;
+        if(nextLevel>4)return false;
+      }else if(h.truc.state!=='none')return false;
       h.resume={mode:h.mode,turn:h.turn};
-      h.pendingOffer={kind:'truc',level:2,by:mySeat,to:other(mySeat)};
+      h.pendingOffer={kind:'truc',level:nextLevel,by:mySeat,to:other(mySeat)};
       h.mode='respond_truc';h.turn=other(mySeat);h.envitAvailable=true;
       const pn=state.players?.[K(mySeat)]?.name||`J${mySeat}`;
-      pushLog(state,`${pn} canta truc.`);return true;
+      const label=nextLevel===2?'truc':nextLevel===3?'retruque':'val 4';
+      pushLog(state,`${pn} canta ${label}.`);return true;
     }
     return false;
   });
@@ -915,11 +921,19 @@ function renderActions(state){
   if(fB)fB.disabled=!envitOk||!myT||!!h.pendingOffer;
 
   // --- TRUC ---
-  // Rule: once ANY truc has happened (state!='none'), the Trucar button is DISABLED
-  // The only exception is val4 escalation, which appears as a RESPONSE button, not Trucar
-  const trucHappened=h.truc.state!=='none';
+  // Trucar available if: no truc yet, OR I accepted and can escalate (retruque/val4)
+  const trucAccepted=h.truc.state==='accepted';
+  const trucLevel=Number(h.truc.acceptedLevel||0);
+  const iAccepted=trucAccepted&&h.truc.acceptedBy===mySeat;
+  const canEscalate=iAccepted&&trucLevel<4;
   const trucPending=!!h.pendingOffer&&h.pendingOffer.kind==='truc';
-  tB.disabled=played||!myT||!norm||trucPending||trucHappened;
+  const trucNone=h.truc.state==='none';
+  tB.disabled=played||!myT||!norm||trucPending||(!trucNone&&!canEscalate);
+  // Update button label based on context
+  if(tB&&!tB.disabled){
+    if(canEscalate)tB.textContent=trucLevel===2?'Retrucar':'Val 4';
+    else tB.textContent='Trucar';
+  }else if(tB){tB.textContent='Trucar';}
 
   // --- MAZO ---
   mB.disabled=played||!myT||!norm||!!h.pendingOffer;
@@ -1066,6 +1080,12 @@ function renderAll(room){
         if(iWon){sndWin();startConfetti(true);}
         else{sndLose();startConfetti(false);}
       },3000);
+      // Schedule room deletion after 5 minutes (seat 0 is responsible)
+      if(mySeat===0&&roomRef){
+        setTimeout(async()=>{
+          try{await remove(roomRef);}catch(e){}
+        },5*60*1000);
+      }
     }
     renderRematchStatus(state);
     // Don't return early - let renderTrick show the last cards
@@ -1429,7 +1449,18 @@ async function joinRoom(){
 
 async function leaveRoom(){
   stopBetween();stopTurnTimer();
-  if(roomRef&&mySeat!=null){try{await remove(ref(db,`rooms/${roomCode}/state/players/${K(mySeat)}`));}catch(e){}}
+  if(roomRef&&mySeat!=null){
+    try{
+      // If game is over, delete the whole room so the code can be reused
+      const snap=await get(roomRef);
+      const st=snap.val()?.state;
+      if(st?.status==='game_over'){
+        await remove(roomRef);
+      }else{
+        await remove(ref(db,`rooms/${roomCode}/state/players/${K(mySeat)}`));
+      }
+    }catch(e){}
+  }
   localStorage.removeItem(LS.room);localStorage.removeItem(LS.seat);location.reload();
 }
 
