@@ -49,6 +49,7 @@
 <div id="screenGame" class="screen hidden">
 
   <!-- HUD superior -->
+  <div id="absenceNotif" class="absence-notif hidden">⚠️ El teu rival s'ha desconnectat…</div>
   <div id="hud">
     <div class="hud-left">
       <span id="hudRoom" class="hud-pill">—</span>
@@ -73,6 +74,7 @@
     <!-- Rival arriba -->
     <div id="rivalZone">
       <div class="rival-header">
+        <div id="rivalAv" class="player-av-sm"></div>
         <div id="rivalName" class="player-name">—</div>
         <svg id="rivalTimerRing" class="timer-ring hidden" viewBox="0 0 36 36">
           <circle class="timer-ring-bg" cx="18" cy="18" r="15"/>
@@ -100,6 +102,7 @@
           <circle class="timer-ring-bg" cx="18" cy="18" r="15"/>
           <circle id="myTimerArc" class="timer-ring-arc" cx="18" cy="18" r="15"/>
         </svg>
+        <div id="myAv" class="player-av-sm"></div>
         <div id="myName" class="player-name">—</div>
       </div>
     </div>
@@ -107,9 +110,8 @@
 
   <!-- Info lateral derecha (juego) -->
   <div id="sideInfo">
-    <div class="si-block"><div class="si-lbl">Mano</div><div id="siMano">—</div></div>
+    <div class="si-block"><div class="si-lbl">Torn</div><div id="siMano">—</div></div>
     <div class="si-block"><div class="si-lbl">Ronda</div><div id="siHand">0</div></div>
-    <div class="si-block"><div class="si-lbl">Bazas</div><div id="siBazas">0-0</div></div>
   </div>
 
   <!-- Registro izquierda -->
@@ -148,6 +150,23 @@
   <div id="waitingOverlay" class="overlay hidden">
     <div class="overlay-card waiting-card">
       <img src="portada.png" alt="El Truc de la Terreta" class="waiting-portada" />
+      <div class="avatar-pick">
+        <div class="avatar-pick-lbl">Tria el teu avatar:</div>
+        <div class="avatar-options">
+          <div class="av-opt" data-av="0" onclick="pickAvatar(0)">
+            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#f0b429"/><circle cx="25" cy="20" r="2" fill="#333"/><circle cx="35" cy="20" r="2" fill="#333"/><path d="M24 28 Q30 34 36 28" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#2ea043"/></svg>
+          </div>
+          <div class="av-opt" data-av="1" onclick="pickAvatar(1)">
+            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#da3633"/><circle cx="25" cy="20" r="2.5" fill="#fff"/><circle cx="35" cy="20" r="2.5" fill="#fff"/><path d="M24 29 Q30 35 36 29" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#388bfd"/></svg>
+          </div>
+          <div class="av-opt" data-av="2" onclick="pickAvatar(2)">
+            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#e040fb"/><circle cx="25" cy="19" r="2" fill="#333"/><circle cx="35" cy="19" r="2" fill="#333"/><path d="M26 27 Q30 23 34 27" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M16 16 Q22 8 30 10 Q38 8 44 16" stroke="#c004d0" stroke-width="3" fill="none"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#c004d0"/></svg>
+          </div>
+          <div class="av-opt" data-av="3" onclick="pickAvatar(3)">
+            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#f08030"/><circle cx="24" cy="19" r="2.5" fill="#333"/><circle cx="36" cy="19" r="2.5" fill="#333"/><path d="M24 29 Q30 34 36 29" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="30" cy="8" r="5" fill="#f08030" stroke="#c05000" stroke-width="1.5"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#c05000"/></svg>
+          </div>
+        </div>
+      </div>
       <div class="ov-title">Sala creada</div>
       <div class="waiting-code-row">
         <span class="waiting-code-lbl">Codi:</span>
