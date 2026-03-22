@@ -189,15 +189,17 @@ function applyHandEnd(state,reason){
 
 function resolveTrick(state){
   const h=state.hand;
-  // Leer cartas jugadas con claves "c0","c1"
-  const c0=h.currentTrick.cards?.['c0']||null;
-  const c1=h.currentTrick.cards?.['c1']||null;
+  const tc=h.currentTrick?.cards||{};
+  const c0=tc['c0']||null;
+  const c1=tc['c1']||null;
   let w=null;
   if(c0&&c1){const cmp=cmpTrick(c0,c1);w=cmp>0?0:cmp<0?1:null;}
-  h.trickHistory.push({index:h.trickIndex+1,cards:{c0,c1},winner:w,lead:h.currentTrick.lead});
+  const lead=h.currentTrick?.lead??state.mano;
+  h.trickHistory.push({index:h.trickIndex+1,cards:{c0,c1},winner:w,lead});
   if(w!==null){h.trickWins[K(w)]=(Number(h.trickWins[K(w)]||0))+1;h.turn=w;pushLog(state,`Baza ${h.trickIndex+1}: guanya J${w}.`);}
-  else{h.turn=h.currentTrick.lead;pushLog(state,`Baza ${h.trickIndex+1}: parda.`);}
-  h.currentTrick={cards:{},lead:h.turn,playedBy:[]};
+  else{h.turn=lead;pushLog(state,`Baza ${h.trickIndex+1}: parda.`);}
+  // CRÍTICO: Firebase elimina nodos vacíos. Usamos _e:1 para que cards nunca sea null
+  h.currentTrick={cards:{_e:1},lead:h.turn,playedBy:[]};
   h.trickIndex+=1;h.mode='normal';
   const w0=Number(h.trickWins[K(0)]||0),w1=Number(h.trickWins[K(1)]||0);
   if(w0>=2||w1>=2||h.trickIndex>=3)applyHandEnd(state,`Mà: guanya J${handWinner(state)}.`);
@@ -256,8 +258,12 @@ async function playCard(card){
     // Guardar mano sin la carta jugada
     h.hands[K(mySeat)]=toHandObj(mine.filter(c=>c!==card));
     // Guardar carta jugada — clave "c0" o "c1" (nunca numérica)
-    if(!h.currentTrick.cards)h.currentTrick.cards={};
+    // CRÍTICO: Firebase puede devolver null para cards vacío; inicializar siempre
+    if(!h.currentTrick)h.currentTrick={cards:{_e:1},lead:h.turn,playedBy:[]};
+    if(!h.currentTrick.cards||typeof h.currentTrick.cards!=='object')h.currentTrick.cards={_e:1};
     h.currentTrick.cards[`c${mySeat}`]=card;
+    // Limpiar el marcador vacío si estaba
+    delete h.currentTrick.cards._e;
     h.currentTrick.playedBy=(h.currentTrick.playedBy||[]).concat([mySeat]);
     h.envitAvailable=false;
     pushLog(state,`J${mySeat} juga ${cardLabel(card)}.`);
@@ -362,7 +368,8 @@ async function respondTruc(choice){
       pushLog(state,'Retruque a 3.');return true;
     }
     if(choice==='val4'){
-      if(offer.level!==2&&offer.level!==3)return false;
+      // Val 4 solo se puede responder al retruque (level 3), no al truc inicial (level 2)
+      if(offer.level!==3)return false;
       h.pendingOffer={kind:'truc',level:4,by:resp,to:caller};
       h.turn=caller;h.mode='respond_truc';h.envitAvailable=true;
       pushLog(state,'Val 4 al truc.');return true;
@@ -502,10 +509,10 @@ function renderTrick(state){
   $('trickSlot0').innerHTML='';$('trickSlot1').innerHTML='';
   const h=state.hand;if(!h)return;
   const cards=h.currentTrick?.cards||{};
-  // Leemos "c0" y "c1"
+  // Leemos "c0" y "c1" (ignoramos _e que es marcador interno)
   [0,1].forEach(seat=>{
     const card=cards[`c${seat}`];
-    if(card){const el=buildCard(card);el.classList.add('land-anim');$(`trickSlot${seat}`).appendChild(el);}
+    if(card&&card!='_e'){const el=buildCard(card);el.classList.add('land-anim');$(`trickSlot${seat}`).appendChild(el);}
   });
   const info=$('centerInfo');info.innerHTML='';
   const hist=h.trickHistory||[];
@@ -533,7 +540,8 @@ function renderActions(state){
   const myT=h.turn===mySeat,norm=h.mode==='normal',envDone=h.envit.state!=='none';
   eB.disabled=!myT||!h.envitAvailable||envDone||!!h.pendingOffer||(h.mode!=='normal'&&h.mode!=='respond_truc');
   tB.disabled=!myT||!norm||!!h.pendingOffer;
-  mB.disabled=!myT||!norm||!!h.pendingOffer||h.trickIndex!==0||Object.keys(h.currentTrick?.cards||{}).length!==0;
+  const realPlayed=Object.entries(h.currentTrick?.cards||{}).filter(([k,v])=>k!=='_e'&&v).length;
+  mB.disabled=!myT||!norm||!!h.pendingOffer||h.trickIndex!==0||realPlayed!==0;
   if(h.pendingOffer&&h.turn===mySeat){
     om.textContent=h.pendingOffer.kind==='envit'
       ?(h.pendingOffer.level==='falta'?'Envit de falta':h.pendingOffer.level===4?'Torne (4)':'Envit')
@@ -548,7 +556,8 @@ function renderActions(state){
       if(h.envitAvailable&&!envDone)add('Envidar','abtn-green',()=>startOffer('envit'));
       add('Vull','abtn-green',()=>respondTruc('vull'));add('No vull','abtn-red',()=>respondTruc('no_vull'));
       if(h.pendingOffer.level===2)add('Retruque','abtn-gold',()=>respondTruc('retruque'));
-      if(h.pendingOffer.level===2||h.pendingOffer.level===3)add('Val 4','abtn-gold',()=>respondTruc('val4'));
+      // Val 4 solo disponible tras retruque (level 3)
+      if(h.pendingOffer.level===3)add('Val 4','abtn-gold',()=>respondTruc('val4'));
     }
   }
   const sm=$('statusMsg');
