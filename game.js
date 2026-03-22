@@ -97,6 +97,10 @@ let prevTurnKey='',prevEnvSt='none',prevTrucSt='none';
 let chatOpen=false,lastChatN=0;
 let _lastState=null; // último estado conocido para uso en helpers de render
 let uiLocked=false; // bloqueo visual inmediato
+// Render tracking — avoid unnecessary DOM rebuilds that cause flash
+let _prevHandsKey='';  // tracks hand cards state
+let _prevTrickKey='';  // tracks trick cards state
+let _prevHandKey='';   // tracks which hand we're in
 
 const $=id=>document.getElementById(id);
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -177,28 +181,32 @@ function getTrickIndex(h){return real(h?.trickIndex);}
 // ─── Game logic ───────────────────────────────────────────────────────────────
 function handWinner(state){
   const h=state.hand;
+  // Si alguien ganó 2 bazas ya está claro
   const w0=getTW(h,0),w1=getTW(h,1);
-  if(w0>=2)return 0;if(w1>=2)return 1;
+  if(w0>=2)return 0;
+  if(w1>=2)return 1;
   const hist=h.trickHistory||[];
-  // Con menos de 3 bazas jugadas, miramos si alguien lleva ventaja
-  const r1=hist[0]?.winner??null;
-  const r2=hist[1]?.winner??null;
-  const r3=hist[2]?.winner??null;
-  // Todas pardas → gana el que tiene la mano
-  if(r1===null&&r2===null&&(r3===null||r3===undefined))return state.mano;
-  // Baza 1 parda → gana quien gane baza 2; si baza 2 también parda → baza 3; si todo parda → mano
+  const r1=hist.length>0?hist[0].winner:undefined; // null=parda, 0/1=ganador, undefined=no jugada
+  const r2=hist.length>1?hist[1].winner:undefined;
+  const r3=hist.length>2?hist[2].winner:undefined;
+  // Baza 1 parda → decide baza 2 (si baza 2 tb parda → mano)
   if(r1===null){
-    if(r2!==null)return r2;
-    if(r3!==null)return r3;
-    return state.mano;
+    if(r2!==null&&r2!==undefined)return r2;
+    return state.mano; // baza 2 parda o no jugada → gana el mano
   }
-  // Baza 1 con ganador → si baza 2 parda, sigue ganando el de baza 1
-  // Si baza 2 tiene ganador diferente → va a baza 3
-  if(r2===null)return r1; // baza 2 parda: gana el de baza 1
-  if(r1===r2)return r1;   // mismo ganador en 1 y 2
-  // Ganadores distintos en 1 y 2 → desempate en baza 3
-  if(r3!==null)return r3;
-  return r1; // si falta baza 3, provisionalmente gana el de baza 1
+  // Baza 1 con ganador
+  if(r1!==undefined){
+    // Baza 2 parda o no jugada → gana el de baza 1
+    if(r2===null||r2===undefined)return r1;
+    // Baza 2 mismo ganador → ese jugador gana
+    if(r2===r1)return r1;
+    // Baza 2 ganó el otro → desempate en baza 3
+    if(r3!==null&&r3!==undefined)return r3;
+    // Baza 3 parda → gana el de baza 1 (tiene la primera victoria)
+    if(r3===null)return r1;
+    return r1; // baza 3 no jugada aún → provisional
+  }
+  return state.mano;
 }
 
 function applyHandEnd(state,reason){
@@ -256,7 +264,17 @@ function resolveTrick(state){
   // Envit SOLO permitido antes de jugar la 1ª carta de la 1ª baza
   h.envitAvailable=false;
   const w0=getTW(h,0),w1=getTW(h,1);
-  if(w0>=2||w1>=2||getTrickIndex(h)>=3)applyHandEnd(state,`Mà: guanya J${handWinner(state)}.`);
+  const tIdx=getTrickIndex(h);
+  const hist=h.trickHistory||[];
+  // Terminar mano si: 2 bazas ganadas, o 3 bazas jugadas,
+  // o baza 1 fue parda y baza 2 tiene ganador (el ganador de b2 gana)
+  const b1Draw=hist.length>=1&&hist[0].winner===null;
+  const b2HasWinner=hist.length>=2&&hist[1].winner!==null;
+  const handOver=w0>=2||w1>=2||tIdx>=3||(b1Draw&&b2HasWinner);
+  if(handOver){
+    const hw=handWinner(state);
+    applyHandEnd(state,`Mà: guanya ${_lastState?pName(_lastState,hw):'J'+hw}.`);
+  }
 }
 
 function resumeOffer(state){
@@ -602,7 +620,7 @@ function renderRivalCards(handObj){
   z.setAttribute('data-count',String(n));
   for(let i=0;i<n;i++){
     const s=document.createElement('div');
-    s.className='rival-card-slot deal-anim';
+    s.className='rival-card-slot';
     // Separación en abanico: la del medio centrada, las laterales inclinadas
     const angles=n===3?[-8,0,8]:n===2?[-5,5]:[0];
     const xoffs=n===3?[-44,0,44]:n===2?[-24,24]:[0];
@@ -613,16 +631,18 @@ function renderRivalCards(handObj){
 }
 
 function renderMyCards(state){
-  const h=state.hand,z=$('myCards');z.innerHTML='';if(!h)return;
+  const h=state.hand,z=$('myCards');if(!h){z.innerHTML='';return;}
   const myCards=fromHObj(h.hands?.[K(mySeat)]);
-  // Jugable si NO hemos jugado aún en esta baza
   const played=alreadyPlayed(h,mySeat);
-  // CLAVE: solo puede jugar carta el jugador cuyo turno sea (h.turn===mySeat)
-  // Esto garantiza que tras resolver una baza, solo el ganador puede empezar la siguiente
   const canPlay=!played&&!uiLocked&&h.turn===mySeat&&h.mode==='normal'&&!h.pendingOffer&&state.status==='playing'&&h.status==='in_progress';
+  // Skip full rebuild if hand cards haven't changed (prevents flash)
+  const handsKey=myCards.join(',')+'|'+canPlay;
+  if(handsKey===_prevHandsKey&&z.children.length===myCards.length)return;
+  _prevHandsKey=handsKey;
+  z.innerHTML='';
 
   myCards.forEach(card=>{
-    const wrap=document.createElement('div');wrap.className='my-card-wrap deal-anim';
+    const wrap=document.createElement('div');wrap.className='my-card-wrap';
     const cel=buildCard(card);wrap.appendChild(cel);
     if(canPlay){
       wrap.classList.add('playable');
@@ -638,11 +658,16 @@ function renderMyCards(state){
 
 function renderTrick(state){
   const slot0=$('trickSlot0'),slot1=$('trickSlot1');
-  slot0.innerHTML='';slot1.innerHTML='';
-  const h=state.hand;if(!h)return;
-
+  const h=state.hand;
+  if(!h){slot0.innerHTML='';slot1.innerHTML='';return;}
+  // Build a key representing current trick state
   const allT=h.allTricks||[];
   const p0=getPlayed(h,0),p1=getPlayed(h,1);
+  const trickKey=allT.length+'|'+(p0||'-')+'|'+(p1||'-');
+  if(trickKey===_prevTrickKey)return; // nothing changed, skip
+  _prevTrickKey=trickKey;
+  slot0.innerHTML='';slot1.innerHTML='';
+
   const hasCurrent=p0||p1;
 
   // Each slot holds a flex row of cards side-by-side
@@ -777,6 +802,9 @@ function detectSounds(state){
 function renderAll(room){
   const state=room?.state||defaultState();
   resetInactivity();detectSounds(state);_lastState=state;
+  // Reset render cache when hand changes so new cards animate in properly
+  const hKey=real(state.handNumber||OFFSET)+'-'+(state.hand?.mano??'x');
+  if(hKey!==(_prevHandKey||'')){_prevHandsKey='';_prevTrickKey='';_prevHandKey=hKey;}
   renderHUD(state);
   $('myName').textContent=pName(state,mySeat);
   $('rivalName').textContent=pName(state,other(mySeat));
