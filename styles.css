@@ -403,3 +403,28 @@ h1 .hi { color: var(--gold); }
   border: 1px solid rgba(255,255,255,.12) !important;
 }
 #goTitle { font-size: 22px; font-weight: 900; color: var(--gold); letter-spacing: -0.5px; }
+
+/* ── RIVAL CARDS FAN (absolute positioned) ── */
+.rival-cards {
+  position: relative !important;
+  height: 96px !important;
+  width: 180px !important;
+  margin: 0 auto;
+}
+.rival-card-slot {
+  position: absolute !important;
+  top: 0; left: 50%;
+  margin-left: -38px; /* half card width */
+  transform-origin: bottom center;
+  transition: transform .3s ease, opacity .3s ease;
+}
+
+/* ── TRICK SLOT wider for stacked cards ── */
+.trick-slot {
+  width: 110px !important;
+  min-height: 140px !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+}
