@@ -363,10 +363,9 @@ async function playCard(card){
       }else{
         // Esperamos al rival
         h.turn=other(mySeat);
-        // Si ya se jugó en la baza 1+, no se puede envidar
-        // En la baza 0 y antes de que el primero juegue, envitAvailable ya era true
-        // Al jugar la primera carta de la mano, se bloquea el envit para siempre
-        h.envitAvailable=false;
+        // El segundo jugador SÍ puede envidar antes de su primera carta (baza 1)
+        const isBaza1=(h.trickHistory||[]).length===0;
+        h.envitAvailable=isBaza1; // true si aún estamos en la primera baza
       }
       return true;
     });
@@ -517,17 +516,13 @@ async function timeoutTurn(){
 
 // ─── Timers ───────────────────────────────────────────────────────────────────
 // ── Circular ring helpers ─────────────────────────────────────────────────────
-const RING_C = 2*Math.PI*15; // circumference for r=15
+const RING_C = 2*Math.PI*25; // r=25 for avatar rings // circumference for r=15
 function setRing(arcId,ringId,pct,phase){
-  const arc=$(arcId),ring=$(ringId);if(!arc||!ring)return;
-  ring.classList.toggle('hidden',pct<=0);
-  const dash=RING_C*(pct/100);
+  const arc=$(arcId);if(!arc)return;
+  const dash=RING_C*(Math.max(0,pct)/100);
   arc.style.strokeDasharray=`${dash} ${RING_C}`;
-  // Color: green→yellow→red
   const color=pct>60?'#2ea043':pct>30?'#e8ab2a':'#da3633';
   arc.style.stroke=color;
-  // Pulse on urgent
-  ring.style.filter=pct<=20?`drop-shadow(0 0 4px ${color})`:'none';
 }
 
 function stopTurnTimer(){
@@ -593,13 +588,25 @@ function startBetween(summaryHtml){
   ov.classList.remove('hidden');
   // Countdown in center of table, like a trucar/envit message
   let n=5;
+  // Create persistent countdown element (doesn't re-animate each second)
+  let cdEl=$('tableCdEl');
+  if(!cdEl){
+    cdEl=document.createElement('div');cdEl.id='tableCdEl';cdEl.className='table-cd-fixed';
+    const cz=document.getElementById('centerZone');
+    if(cz)cz.appendChild(cdEl);
+  }
   function tick(){
-    _showCountdownMsg(`<div class="cd-subtitle">Següent mà en…</div><div class="cd-number">${n}</div>`);
-    if(n<=0){stopBetween();if(mySeat===0)dealHand();return;}
-    n--;sndTick();
+    if(n<0){
+      cdEl.classList.add('hidden');
+      stopBetween();if(mySeat===0)dealHand();return;
+    }
+    cdEl.classList.remove('hidden');
+    cdEl.innerHTML=`<div class="cd-subtitle">Següent mà en…</div><div class="cd-number">${n}</div>`;
+    if(n<5)sndTick();
+    n--;
     betweenTimer=setTimeout(tick,1000);
   }
-  betweenTimer=setTimeout(tick,3000); // 3s show summary first
+  betweenTimer=setTimeout(()=>{tick();},3000); // 3s show summary first
 }
 
 // ─── Card builders ────────────────────────────────────────────────────────────
@@ -985,14 +992,17 @@ function renderAll(room){
   if(state.status==='game_over'){
     stopBetween();stopTurnTimer();$('waitingOverlay').classList.add('hidden');
     const wasHidden=$('gameOverOverlay').classList.contains('hidden');
-    $('gameOverOverlay').classList.remove('hidden');
     if(wasHidden){
+      // Delay 3s so players see the winning card first
       const iWon=state.winner===mySeat;
-      $('goTitle').textContent=iWon?'🏆 Has guanyat!':'Has perdut';
-      $('goWinner').textContent=pName(state,state.winner)+' guanya';
-      $('goScore').textContent=`${getScore(state,mySeat)} – ${getScore(state,other(mySeat))}`;
-      if(iWon){sndWin();startConfetti(true);}
-      else{sndLose();startConfetti(false);}
+      setTimeout(()=>{
+        $('gameOverOverlay').classList.remove('hidden');
+        $('goTitle').textContent=iWon?'🏆 Has guanyat!':'Has perdut';
+        $('goWinner').textContent=pName(state,state.winner)+' guanya';
+        $('goScore').textContent=`${getScore(state,mySeat)} – ${getScore(state,other(mySeat))}`;
+        if(iWon){sndWin();startConfetti(true);}
+        else{sndLose();startConfetti(false);}
+      },3000);
     }
     renderRematchStatus(state);
     // Don't return early — let renderTrick show the last cards
@@ -1015,7 +1025,7 @@ function renderAll(room){
       const rivReady=mySeat===0?p1ready:p0ready;
       if(ready){
         const rivName=pName(state,other(mySeat));
-        const readyTxt=rivReady?`${rivName} està preparat!`:'Esperant que els jugadors estiguen llestos…';
+        const readyTxt=rivReady?`${rivName} està preparat!`:'Esperant que els jugadors estiguen preparats…';
         $('waitingStatus').textContent=readyTxt;
       }else{
         $('waitingStatus').textContent='Esperant el segon jugador…';
@@ -1153,18 +1163,19 @@ async function sendChat(){
 // ─── Room ─────────────────────────────────────────────────────────────────────
 
 // ─── Avatars ──────────────────────────────────────────────────────────────────
-const AVATAR_SVGS=['<svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#f0b429"/><circle cx="25" cy="20" r="2" fill="#333"/><circle cx="35" cy="20" r="2" fill="#333"/><path d="M24 28 Q30 34 36 28" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#2ea043"/></svg>', '<svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#da3633"/><circle cx="25" cy="20" r="2.5" fill="#fff"/><circle cx="35" cy="20" r="2.5" fill="#fff"/><path d="M24 29 Q30 35 36 29" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#388bfd"/></svg>', '<svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#e040fb"/><circle cx="25" cy="19" r="2" fill="#333"/><circle cx="35" cy="19" r="2" fill="#333"/><path d="M26 27 Q30 23 34 27" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M16 16 Q22 8 30 10 Q38 8 44 16" stroke="#c004d0" stroke-width="3" fill="none"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#c004d0"/></svg>', '<svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#f08030"/><circle cx="24" cy="19" r="2.5" fill="#333"/><circle cx="36" cy="19" r="2.5" fill="#333"/><path d="M24 29 Q30 34 36 29" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="30" cy="8" r="5" fill="#f08030" stroke="#c05000" stroke-width="1.5"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#c05000"/></svg>'];
+const AVATAR_SVGS=['<svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="30" fill="#2a6496"/><circle cx="30" cy="24" r="13" fill="#fcd29f"/><circle cx="25" cy="22" r="2" fill="#3d2000"/><circle cx="35" cy="22" r="2" fill="#3d2000"/><circle cx="26" cy="21" r="0.8" fill="#fff"/><circle cx="36" cy="21" r="0.8" fill="#fff"/><path d="M25 29 Q30 34 35 29" stroke="#c0703a" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M20 16 Q23 12 30 13 Q37 12 40 16" stroke="#7a4a10" stroke-width="2.5" fill="#5a3008"/><rect x="8" y="40" width="44" height="22" rx="11" fill="#1a4a7a"/><path d="M20 40 Q30 46 40 40" fill="#fcd29f"/></svg>', '<svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="30" fill="#8b2252"/><circle cx="30" cy="24" r="13" fill="#fde3c8"/><circle cx="25" cy="22" r="2" fill="#3d2000"/><circle cx="35" cy="22" r="2" fill="#3d2000"/><circle cx="26" cy="21" r="0.8" fill="#fff"/><circle cx="36" cy="21" r="0.8" fill="#fff"/><path d="M25 30 Q30 35 35 30" stroke="#d05070" stroke-width="1.8" fill="none" stroke-linecap="round"/><ellipse cx="30" cy="13" rx="13" ry="5" fill="#d4800a"/><rect x="8" y="40" width="44" height="22" rx="11" fill="#6b1040"/><path d="M20 40 Q30 46 40 40" fill="#fde3c8"/></svg>', '<svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="30" fill="#2e7d32"/><circle cx="30" cy="24" r="13" fill="#ffe0b2"/><circle cx="25" cy="22" r="2" fill="#1a1a1a"/><circle cx="35" cy="22" r="2" fill="#1a1a1a"/><circle cx="26" cy="21" r="0.8" fill="#fff"/><circle cx="36" cy="21" r="0.8" fill="#fff"/><path d="M24 29 Q30 33 36 29" stroke="#b55a00" stroke-width="1.8" fill="none" stroke-linecap="round"/><rect x="17" y="12" width="26" height="7" rx="3" fill="#1a1a1a"/><rect x="8" y="40" width="44" height="22" rx="11" fill="#1b5e20"/><path d="M20 40 Q30 46 40 40" fill="#ffe0b2"/></svg>', '<svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="30" fill="#e65100"/><circle cx="30" cy="24" r="13" fill="#ffd7a8"/><circle cx="25" cy="21" r="2.2" fill="#1a1a1a"/><circle cx="35" cy="21" r="2.2" fill="#1a1a1a"/><circle cx="26" cy="20" r="0.9" fill="#fff"/><circle cx="36" cy="20" r="0.9" fill="#fff"/><ellipse cx="30" cy="26" rx="2" ry="1.2" fill="#c8704a"/><path d="M24 29 Q30 35 36 29" stroke="#b54020" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M22 18 Q24 14 30 15 Q36 14 38 18" stroke="#5a2a00" stroke-width="2" fill="none"/><rect x="8" y="40" width="44" height="22" rx="11" fill="#bf360c"/><path d="M20 40 Q30 46 40 40" fill="#ffd7a8"/></svg>'];
 let myAvatar=Number(localStorage.getItem('truc_avatar')||0);
 
 function pickAvatar(idx){
   myAvatar=idx;
-  localStorage.setItem('truc_avatar',idx);
+  localStorage.setItem('truc_avatar',String(idx));
   document.querySelectorAll('.av-opt').forEach((el,i)=>el.classList.toggle('av-selected',i===idx));
-  // Save to Firebase if in session
   if(roomRef&&mySeat!==null){
     set(ref(db,`rooms/${roomCode}/avatars/${K(mySeat)}`),idx).catch(()=>{});
   }
 }
+// Expose globally so HTML onclick works AND attach via JS
+window.pickAvatar=pickAvatar;
 function getAvatarSvg(idx){return AVATAR_SVGS[idx]||AVATAR_SVGS[0];}
 
 function renderAvatars(room){
@@ -1280,6 +1291,12 @@ $('chatSend').addEventListener('click',sendChat);
 $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+// Attach avatar click listeners via JS (module scope)
+document.querySelectorAll('.av-opt').forEach((el,i)=>{
+  el.addEventListener('click',()=>pickAvatar(i));
+});
+// Restore saved avatar selection
+pickAvatar(myAvatar);
 loadLS();
 (async()=>{
   const _sr=localStorage.getItem(LS.room);
