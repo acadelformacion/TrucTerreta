@@ -160,6 +160,7 @@ function makeHand(mano){
     hands:{[K(0)]:toHObj(deck.slice(0,3)),[K(1)]:toHObj(deck.slice(3,6))},
     // played: siempre presente con EMPTY_CARD para que Firebase no lo borre
     played:{[PK(0)]:EMPTY_CARD,[PK(1)]:EMPTY_CARD},
+    lastTrick:{c0:EMPTY_CARD,c1:EMPTY_CARD,w:99},  // última baza resuelta (99=no hay)
     trickLead:mano,
     trickIndex:OFFSET,  // stored +OFFSET
     trickWins:{[K(0)]:OFFSET,[K(1)]:OFFSET},
@@ -206,6 +207,11 @@ function applyHandEnd(state,reason){
   if(h.truc.state==='accepted'){
     const tw=handWinner(state),tp=Number(h.truc.acceptedLevel||0);
     addScore(state,tw,tp);pushLog(state,`Truc: guanya J${tw} (+${tp}).`);if(finish())return;
+  }else if(h.truc.state==='none'){
+    // Sin truc: +1 al ganador de la mano
+    const hw=handWinner(state);
+    if(hw!==null&&hw!==undefined){addScore(state,hw,1);pushLog(state,`Mà guanyada per J${hw} (+1).`);}
+    if(finish())return;
   }
   if(reason)pushLog(state,reason);
   pushLog(state,`Marcador: ${getScore(state,0)}–${getScore(state,1)}`);
@@ -226,6 +232,8 @@ function resolveTrick(state){
   else{h.turn=lead;pushLog(state,`Baza ${idx+1}: parda.`);}
   h.trickLead=h.turn;
   h.trickIndex=(Number(h.trickIndex||OFFSET))+1;
+  // Guardar la baza resuelta para mostrar en mesa
+  h.lastTrick={c0:c0||EMPTY_CARD,c1:c1||EMPTY_CARD,w:w===null?99:w};
   // RESET played con EMPTY_CARD — nunca borramos el nodo
   resetPlayed(h);
   h.mode='normal';
@@ -286,10 +294,12 @@ async function playCard(card){
       setPlayed(h,mySeat,card);
       h.envitAvailable=false;
       pushLog(state,`J${mySeat} juga ${cardLabel(card)}.`);
-      h.turn=other(mySeat);
       if(alreadyPlayed(h,other(mySeat))){
+        // Los dos han jugado → resolver baza (resolveTrick fija h.turn al ganador)
         resolveTrick(state);
       }else{
+        // Esperamos al rival
+        h.turn=other(mySeat);
         h.envitAvailable=true;
       }
       return true;
@@ -522,10 +532,36 @@ function renderMyCards(state){
 function renderTrick(state){
   $('trickSlot0').innerHTML='';$('trickSlot1').innerHTML='';
   const h=state.hand;if(!h)return;
-  [0,1].forEach(seat=>{
-    const card=getPlayed(h,seat);
-    if(card){const el=buildCard(card);el.classList.add('land-anim');$(`trickSlot${seat}`).appendChild(el);}
-  });
+
+  const p0=getPlayed(h,0), p1=getPlayed(h,1);
+  const anyCurrentlyPlayed = p0||p1;
+
+  if(anyCurrentlyPlayed){
+    // Baza en curso: mostrar cartas jugadas
+    [0,1].forEach(seat=>{
+      const card=getPlayed(h,seat);
+      if(card){const el=buildCard(card);el.classList.add('land-anim');$(`trickSlot${seat}`).appendChild(el);}
+    });
+  } else {
+    // Baza aún no iniciada: mostrar la última baza resuelta si existe
+    const lt=h.lastTrick;
+    if(lt){
+      const lc0=lt.c0&&lt.c0!==EMPTY_CARD?lt.c0:null;
+      const lc1=lt.c1&&lt.c1!==EMPTY_CARD?lt.c1:null;
+      if(lc0||lc1){
+        [0,1].forEach(seat=>{
+          const card=seat===0?lc0:lc1;
+          if(card){
+            const el=buildCard(card);
+            el.style.opacity='0.55';
+            el.style.transform='scale(0.9)';
+            $(`trickSlot${seat}`).appendChild(el);
+          }
+        });
+      }
+    }
+  }
+
   const info=$('centerInfo');info.innerHTML='';
   const hist=h.trickHistory||[];
   if(hist.length){
@@ -537,7 +573,15 @@ function renderTrick(state){
       else d.classList.add('lost');
       dots.appendChild(d);
     });
-    info.appendChild(dots);
+    // Mostrar también quién ganó la última baza
+    if(hist.length>0){
+      const last=hist[hist.length-1];
+      const msg=document.createElement('div');
+      msg.style.cssText='font-size:11px;color:var(--muted);margin-top:4px;text-align:center;';
+      msg.textContent=last.winner===null?'Parda':`Baza ${hist.length}: J${last.winner} guanya`;
+      info.appendChild(msg);
+    }
+    info.insertBefore(dots, info.firstChild);
   }
 }
 
