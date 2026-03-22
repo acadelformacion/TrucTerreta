@@ -693,7 +693,7 @@ function renderTrick(state){
     msg.textContent=last.winner===null?'Parda':`Baza ${hist.length}: ${_lastState?pName(_lastState,last.winner):'J'+last.winner} guanya`;
     info.appendChild(msg);
   }
-}}
+}
 
 function renderActions(state){
   const h=state.hand;
@@ -944,7 +944,6 @@ function startSession(code){
 function setLobbyMsg(txt,cls){const el=$('lobbyMsg');el.textContent=txt;el.className='lobby-msg'+(cls?' '+cls:'');}
 
 async function createRoom(){
-  console.log('createRoom called');
   const name=normName($('nameInput').value);
   const code=sanitize($('roomInput').value)||Math.random().toString(36).slice(2,6).toUpperCase();
   const r=ref(db,`rooms/${code}`);
@@ -989,7 +988,7 @@ async function leaveRoom(){
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────
-$('createBtn').addEventListener('click',()=>{console.log('createBtn clicked');createRoom();});
+$('createBtn').addEventListener('click',createRoom);
 $('joinBtn').addEventListener('click',joinRoom);
 $('leaveBtn').addEventListener('click',leaveRoom);
 $('goLeaveBtn').addEventListener('click',leaveRoom);
