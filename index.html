@@ -74,12 +74,14 @@
     <!-- Rival arriba -->
     <div id="rivalZone">
       <div class="rival-header">
-        <div id="rivalAv" class="player-av-sm"></div>
+        <div class="player-avatar-wrap">
+          <div id="rivalAv" class="player-av-sm"></div>
+          <svg class="av-ring" id="rivalRing" viewBox="0 0 56 56">
+            <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
+            <circle id="rivalTimerArc" class="timer-ring-arc" cx="28" cy="28" r="25"/>
+          </svg>
+        </div>
         <div id="rivalName" class="player-name">—</div>
-        <svg id="rivalTimerRing" class="timer-ring hidden" viewBox="0 0 36 36">
-          <circle class="timer-ring-bg" cx="18" cy="18" r="15"/>
-          <circle id="rivalTimerArc" class="timer-ring-arc" cx="18" cy="18" r="15"/>
-        </svg>
       </div>
       <div id="rivalCards" class="rival-cards" data-count="0"></div>
     </div>
@@ -98,11 +100,13 @@
     <div id="myZone">
       <div id="myCards" class="my-cards"></div>
       <div class="my-zone-header">
-        <svg id="myTimerRing" class="timer-ring hidden" viewBox="0 0 36 36">
-          <circle class="timer-ring-bg" cx="18" cy="18" r="15"/>
-          <circle id="myTimerArc" class="timer-ring-arc" cx="18" cy="18" r="15"/>
-        </svg>
-        <div id="myAv" class="player-av-sm"></div>
+        <div class="player-avatar-wrap">
+          <div id="myAv" class="player-av-sm"></div>
+          <svg class="av-ring" id="myRing" viewBox="0 0 56 56">
+            <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
+            <circle id="myTimerArc" class="timer-ring-arc" cx="28" cy="28" r="25"/>
+          </svg>
+        </div>
         <div id="myName" class="player-name">—</div>
       </div>
     </div>
@@ -153,17 +157,63 @@
       <div class="avatar-pick">
         <div class="avatar-pick-lbl">Tria el teu avatar:</div>
         <div class="avatar-options">
-          <div class="av-opt" data-av="0" onclick="pickAvatar(0)">
-            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#f0b429"/><circle cx="25" cy="20" r="2" fill="#333"/><circle cx="35" cy="20" r="2" fill="#333"/><path d="M24 28 Q30 34 36 28" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#2ea043"/></svg>
+          <div class="av-opt" data-av="0">
+            <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="30" cy="30" r="30" fill="#2a6496"/>
+              <circle cx="30" cy="24" r="13" fill="#fcd29f"/>
+              <circle cx="25" cy="22" r="2" fill="#3d2000"/>
+              <circle cx="35" cy="22" r="2" fill="#3d2000"/>
+              <circle cx="26" cy="21" r="0.8" fill="#fff"/>
+              <circle cx="36" cy="21" r="0.8" fill="#fff"/>
+              <path d="M25 29 Q30 34 35 29" stroke="#c0703a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+              <path d="M20 16 Q23 12 30 13 Q37 12 40 16" stroke="#7a4a10" stroke-width="2.5" fill="#5a3008"/>
+              <rect x="8" y="40" width="44" height="22" rx="11" fill="#1a4a7a"/>
+              <path d="M20 40 Q30 46 40 40" fill="#fcd29f"/>
+            </svg>
           </div>
-          <div class="av-opt" data-av="1" onclick="pickAvatar(1)">
-            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#da3633"/><circle cx="25" cy="20" r="2.5" fill="#fff"/><circle cx="35" cy="20" r="2.5" fill="#fff"/><path d="M24 29 Q30 35 36 29" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#388bfd"/></svg>
+          <div class="av-opt" data-av="1">
+            <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="30" cy="30" r="30" fill="#8b2252"/>
+              <circle cx="30" cy="24" r="13" fill="#fde3c8"/>
+              <circle cx="25" cy="22" r="2" fill="#3d2000"/>
+              <circle cx="35" cy="22" r="2" fill="#3d2000"/>
+              <circle cx="26" cy="21" r="0.8" fill="#fff"/>
+              <circle cx="36" cy="21" r="0.8" fill="#fff"/>
+              <path d="M25 30 Q30 35 35 30" stroke="#d05070" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+              <path d="M17 17 Q20 10 30 12 Q35 9 43 17" stroke="#c46000" stroke-width="0" fill="#c46000"/>
+              <ellipse cx="30" cy="13" rx="13" ry="5" fill="#d4800a"/>
+              <rect x="8" y="40" width="44" height="22" rx="11" fill="#6b1040"/>
+              <path d="M20 40 Q30 46 40 40" fill="#fde3c8"/>
+            </svg>
           </div>
-          <div class="av-opt" data-av="2" onclick="pickAvatar(2)">
-            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#e040fb"/><circle cx="25" cy="19" r="2" fill="#333"/><circle cx="35" cy="19" r="2" fill="#333"/><path d="M26 27 Q30 23 34 27" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M16 16 Q22 8 30 10 Q38 8 44 16" stroke="#c004d0" stroke-width="3" fill="none"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#c004d0"/></svg>
+          <div class="av-opt" data-av="2">
+            <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="30" cy="30" r="30" fill="#2e7d32"/>
+              <circle cx="30" cy="24" r="13" fill="#ffe0b2"/>
+              <circle cx="25" cy="22" r="2" fill="#1a1a1a"/>
+              <circle cx="35" cy="22" r="2" fill="#1a1a1a"/>
+              <circle cx="26" cy="21" r="0.8" fill="#fff"/>
+              <circle cx="36" cy="21" r="0.8" fill="#fff"/>
+              <path d="M24 29 Q30 33 36 29" stroke="#b55a00" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+              <rect x="17" y="12" width="26" height="7" rx="3" fill="#1a1a1a"/>
+              <rect x="8" y="40" width="44" height="22" rx="11" fill="#1b5e20"/>
+              <path d="M20 40 Q30 46 40 40" fill="#ffe0b2"/>
+            </svg>
           </div>
-          <div class="av-opt" data-av="3" onclick="pickAvatar(3)">
-            <svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="14" fill="#f08030"/><circle cx="24" cy="19" r="2.5" fill="#333"/><circle cx="36" cy="19" r="2.5" fill="#333"/><path d="M24 29 Q30 34 36 29" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="30" cy="8" r="5" fill="#f08030" stroke="#c05000" stroke-width="1.5"/><rect x="0" y="42" width="60" height="20" rx="10" fill="#c05000"/></svg>
+          <div class="av-opt" data-av="3">
+            <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="30" cy="30" r="30" fill="#e65100"/>
+              <circle cx="30" cy="24" r="13" fill="#ffd7a8"/>
+              <circle cx="25" cy="21" r="2.2" fill="#1a1a1a"/>
+              <circle cx="35" cy="21" r="2.2" fill="#1a1a1a"/>
+              <circle cx="26" cy="20" r="0.9" fill="#fff"/>
+              <circle cx="36" cy="20" r="0.9" fill="#fff"/>
+              <ellipse cx="30" cy="26" rx="2" ry="1.2" fill="#c8704a"/>
+              <path d="M24 29 Q30 35 36 29" stroke="#b54020" stroke-width="2" fill="none" stroke-linecap="round"/>
+              <path d="M22 18 Q24 14 30 15 Q36 14 38 18" stroke="#5a2a00" stroke-width="2" fill="none"/>
+              <rect x="8" y="40" width="44" height="22" rx="11" fill="#bf360c"/>
+              <path d="M20 40 Q30 46 40 40" fill="#ffd7a8"/>
+            </svg>
           </div>
         </div>
       </div>
