@@ -95,6 +95,7 @@ let unsubGame=null,unsubChat=null;
 let inactTimer=null,betweenTimer=null,turnTimer=null;
 let prevTurnKey='',prevEnvSt='none',prevTrucSt='none';
 let chatOpen=false,lastChatN=0;
+let _lastState=null; // último estado conocido para uso en helpers de render
 let uiLocked=false; // bloqueo visual inmediato
 
 const $=id=>document.getElementById(id);
@@ -549,7 +550,11 @@ function buildScoreSummary(state){
   // Show last 4 log entries that contain point info
   const relevant=logs.filter(l=>l.text&&(l.text.includes('+')&&(l.text.includes('Envit')||l.text.includes('Truc')||l.text.includes('Mà')||l.text.includes('Mazo')))).slice(0,4);
   if(relevant.length){
-    relevant.reverse().forEach(l=>{html+=`<div>${l.text}</div>`;});
+    relevant.reverse().forEach(l=>{
+      // Reemplazar J0/J1 con nicks reales
+      let txt=l.text.replace(/\bJ0\b/g,pName(state,0)).replace(/\bJ1\b/g,pName(state,1));
+      html+=`<div>${txt}</div>`;
+    });
   }
   html+=`<div style="margin-top:8px;font-size:16px;font-weight:700;color:var(--gold)">${pName(state,0)}: ${s0} &nbsp;·&nbsp; ${pName(state,1)}: ${s1}</div>`;
   html+=`</div>`;
@@ -559,8 +564,19 @@ function buildScoreSummary(state){
 function renderRivalCards(handObj){
   const z=$('rivalCards');z.innerHTML='';
   const cards=fromHObj(handObj);const n=cards.length;
-  z.setAttribute('data-count',n);
-  for(let i=0;i<n;i++){const s=document.createElement('div');s.className='rival-card-slot deal-anim';s.appendChild(buildBack());z.appendChild(s);}
+  // Mostrar siempre el número real de cartas restantes del rival (boca abajo)
+  // Empieza con 3, baja a 2, luego 1 conforme juega
+  z.setAttribute('data-count',String(n));
+  for(let i=0;i<n;i++){
+    const s=document.createElement('div');
+    s.className='rival-card-slot deal-anim';
+    // Separación en abanico: la del medio centrada, las laterales inclinadas
+    const angles=n===3?[-8,0,8]:n===2?[-5,5]:[0];
+    const xoffs=n===3?[-44,0,44]:n===2?[-24,24]:[0];
+    s.style.cssText=`transform:translateX(${xoffs[i]||0}px) rotate(${angles[i]||0}deg);z-index:${i+1};`;
+    s.appendChild(buildBack());
+    z.appendChild(s);
+  }
 }
 
 function renderMyCards(state){
@@ -571,7 +587,7 @@ function renderMyCards(state){
   // CLAVE: solo puede jugar carta el jugador cuyo turno sea (h.turn===mySeat)
   // Esto garantiza que tras resolver una baza, solo el ganador puede empezar la siguiente
   const canPlay=!played&&!uiLocked&&h.turn===mySeat&&h.mode==='normal'&&!h.pendingOffer&&state.status==='playing'&&h.status==='in_progress';
-  console.log('renderMyCards: canPlay=',canPlay,'played=',played,'uiLocked=',uiLocked,'turn=',h.turn,'mySeat=',mySeat,'mode=',h.mode);
+
   myCards.forEach(card=>{
     const wrap=document.createElement('div');wrap.className='my-card-wrap deal-anim';
     const cel=buildCard(card);wrap.appendChild(cel);
@@ -601,15 +617,16 @@ function renderTrick(state){
   slot0.style.cssText='position:relative;width:80px;min-height:114px;display:flex;align-items:center;justify-content:center;';
   slot1.style.cssText='position:relative;width:80px;min-height:114px;display:flex;align-items:center;justify-content:center;';
 
-  // Renderizar bazas anteriores
+  // Renderizar bazas anteriores (apiladas verticalmente: más abajo = más antiguas)
   allT.forEach((t,i)=>{
-    const offsets=[-28,-4,20]; // desplazamiento horizontal para apilar (mayor separación)
-    const off=offsets[Math.min(i,offsets.length-1)];
+    // Cada baza anterior sube 18px respecto a la anterior, ligeramente más pequeña
+    const yOff = (allT.length - 1 - i) * 18; // baza más antigua más abajo
+    const scale = 0.82 + i * 0.04; // escala creciente para las más recientes
     [0,1].forEach(seat=>{
       const card=seat===0?t.c0:t.c1;
       if(!card||card===EMPTY_CARD)return;
       const el=buildCard(card);
-      el.style.cssText=`position:absolute;opacity:0.7;transform:translateX(${off}px) scale(0.88);z-index:${i+1};box-shadow:2px 2px 8px rgba(0,0,0,.5);`;
+      el.style.cssText=`position:absolute;opacity:${0.55+i*0.1};transform:translateY(${yOff}px) scale(${scale});z-index:${i+1};box-shadow:2px 4px 10px rgba(0,0,0,.5);`;
       (seat===0?slot0:slot1).appendChild(el);
     });
   });
@@ -640,7 +657,7 @@ function renderTrick(state){
     const last=hist[hist.length-1];
     const msg=document.createElement('div');
     msg.style.cssText='font-size:11px;color:var(--muted);margin-top:4px;text-align:center;';
-    msg.textContent=last.winner===null?'Parda':`Baza ${hist.length}: J${last.winner} guanya`;
+    msg.textContent=last.winner===null?'Parda':`Baza ${hist.length}: ${_lastState?pName(_lastState,last.winner):'J'+last.winner} guanya`;
     info.appendChild(msg);
   }
 }
@@ -724,7 +741,7 @@ function detectSounds(state){
 // ─── MAIN RENDER ──────────────────────────────────────────────────────────────
 function renderAll(room){
   const state=room?.state||defaultState();
-  resetInactivity();detectSounds(state);
+  resetInactivity();detectSounds(state);_lastState=state;
   renderHUD(state);
   $('myName').textContent=pName(state,mySeat);
   $('rivalName').textContent=pName(state,other(mySeat));
@@ -958,9 +975,21 @@ $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 loadLS();
-const _sr=localStorage.getItem(LS.room);
-if(_sr){
-  roomCode=sanitize(_sr);$('roomInput').value=roomCode;
-  const _ss=localStorage.getItem(LS.seat);if(_ss!=null)mySeat=Number(_ss);
-  startSession(roomCode);
-}
+(async()=>{
+  const _sr=localStorage.getItem(LS.room);
+  if(_sr){
+    const _code=sanitize(_sr);
+    // Validar que la sala existe en Firebase antes de reconectarse
+    try{
+      const snap=await get(ref(db,`rooms/${_code}`));
+      if(snap.exists()&&snap.val()?.state){
+        roomCode=_code;$('roomInput').value=_code;
+        const _ss=localStorage.getItem(LS.seat);if(_ss!=null)mySeat=Number(_ss);
+        startSession(_code);
+        return;
+      }
+    }catch(e){}
+    // Sala no existe: limpiar localStorage
+    localStorage.removeItem(LS.room);localStorage.removeItem(LS.seat);
+  }
+})();
