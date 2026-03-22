@@ -237,7 +237,8 @@ function resolveTrick(state){
   // RESET played con EMPTY_CARD — nunca borramos el nodo
   resetPlayed(h);
   h.mode='normal';
-  h.envitAvailable=true; // nueva baza: se puede volver a envidar
+  // Envit SOLO permitido antes de jugar la 1ª carta de la 1ª baza
+  h.envitAvailable=false;
   const w0=getTW(h,0),w1=getTW(h,1);
   if(w0>=2||w1>=2||getTrickIndex(h)>=3)applyHandEnd(state,`Mà: guanya J${handWinner(state)}.`);
 }
@@ -283,10 +284,11 @@ async function playCard(card){
   try{
     await mutate(state=>{
       const h=state.hand;
-      if(!h||state.status!=='playing'||h.status!=='in_progress')return false;
-      if(h.mode!=='normal'||h.pendingOffer)return false;
+      if(!h||state.status!=='playing'||h.status!=='in_progress'){console.warn('PLAYCARD: bad status',state.status,h?.status);return false;}
+      if(h.mode!=='normal'||h.pendingOffer){console.warn('PLAYCARD: bad mode',h.mode,h.pendingOffer);return false;}
+      if(h.turn!==mySeat){console.warn('PLAYCARD: not my turn',h.turn,'vs mySeat',mySeat);return false;}
       // Guardia: ¿ya jugó en esta baza?
-      if(alreadyPlayed(h,mySeat))return false;
+      if(alreadyPlayed(h,mySeat)){console.warn('PLAYCARD: already played');return false;}
       const mine=fromHObj(h.hands?.[K(mySeat)]);
       if(!mine.includes(card))return false;
       // Actualizar mano
@@ -301,7 +303,10 @@ async function playCard(card){
       }else{
         // Esperamos al rival
         h.turn=other(mySeat);
-        h.envitAvailable=true;
+        // Si ya se jugó en la baza 1+, no se puede envidar
+        // En la baza 0 y antes de que el primero juegue, envitAvailable ya era true
+        // Al jugar la primera carta de la mano, se bloquea el envit para siempre
+        h.envitAvailable=false;
       }
       return true;
     });
@@ -545,6 +550,7 @@ function renderMyCards(state){
   // CLAVE: solo puede jugar carta el jugador cuyo turno sea (h.turn===mySeat)
   // Esto garantiza que tras resolver una baza, solo el ganador puede empezar la siguiente
   const canPlay=!played&&!uiLocked&&h.turn===mySeat&&h.mode==='normal'&&!h.pendingOffer&&state.status==='playing'&&h.status==='in_progress';
+  console.log('renderMyCards: canPlay=',canPlay,'played=',played,'uiLocked=',uiLocked,'turn=',h.turn,'mySeat=',mySeat,'mode=',h.mode);
   myCards.forEach(card=>{
     const wrap=document.createElement('div');wrap.className='my-card-wrap deal-anim';
     const cel=buildCard(card);wrap.appendChild(cel);
