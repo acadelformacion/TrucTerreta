@@ -428,3 +428,58 @@ h1 .hi { color: var(--gold); }
   align-items: flex-end !important;
   justify-content: center !important;
 }
+
+/* ── CIRCULAR TIMER RINGS ── */
+.timer-ring {
+  width: 32px; height: 32px; flex-shrink: 0;
+  transform: rotate(-90deg); /* start at top */
+}
+.timer-ring-bg  { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 3; }
+.timer-ring-arc {
+  fill: none; stroke: #2ea043; stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 94.25 94.25; /* full circle */
+  transition: stroke-dasharray .9s linear, stroke .3s ease;
+}
+.timer-ring.hidden { display: none !important; }
+
+/* Rival and my zone headers */
+.rival-header { display: flex; align-items: center; gap: 8px; justify-content: center; }
+.my-zone-header { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 6px; }
+
+/* Hide old turn dot */
+.turn-dot { display: none !important; }
+
+/* ── LOBBY: full bleed background, no black bar ── */
+#screenLobby {
+  background-size: cover !important;
+  background-position: center center !important;
+  background-attachment: fixed !important;
+}
+/* Green felt card color for lobby panel */
+#screenLobby .lobby-wrap {
+  background: rgba(20, 90, 45, 0.92) !important;
+  border: 1px solid rgba(255,255,255,.15) !important;
+}
+/* Also for waitingOverlay card */
+#waitingOverlay .overlay-card {
+  background: rgba(20, 90, 45, 0.94) !important;
+  border: 1px solid rgba(255,255,255,.15) !important;
+}
+
+/* ── TRICK AREA: side by side layout ── */
+.trick-slot {
+  width: auto !important;
+  min-width: 76px !important;
+  max-width: 280px !important;
+  min-height: 114px !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  gap: 5px !important;
+}
+.trick-area {
+  gap: 16px !important;
+}
