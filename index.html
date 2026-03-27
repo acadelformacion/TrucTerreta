@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>El Truc de la Terreta</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="game.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     PANTALLA 1 · LOBBY
+═══════════════════════════════════════ -->
+<div id="screenLobby" class="screen">
+  <div class="lobby-wrap">
+    <div class="lobby-header">
+      <img src="Media/Images/Others/portada.png" alt="Truc Valenciano" class="lobby-portada" />
+      <h1>El Truc de <span class="hi">la Terreta</span></h1>
+      <p class="lobby-sub">1 vs 1 · En temps real</p>
+    </div>
+    <div class="lobby-card">
+      <div class="lfield">
+        <label for="nameInput">Nom</label>
+        <input id="nameInput" type="text" placeholder="Ej. Vicent" autocomplete="off" />
+      </div>
+      <div class="lfield">
+        <label for="roomInput">Codi de sala</label>
+        <input id="roomInput" type="text" placeholder="Ej. K7Q2" autocomplete="off" maxlength="8" />
+      </div>
+      <div class="lobby-btns">
+        <button id="createBtn" class="lbtn lbtn-primary">Crear sala</button>
+        <button id="joinBtn"   class="lbtn lbtn-secondary">Unir-se</button>
+      </div>
+      <div id="lobbyMsg" class="lobby-msg"></div>
+    </div>
+
+    <!-- Available rooms -->
+    <div class="lobby-rooms">
+      <div class="rl-title">Sales obertes</div>
+      <div id="roomList" class="room-list"></div>
+    </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     PANTALLA 2 · MESA DE JUEGO
+═══════════════════════════════════════ -->
+<div id="screenGame" class="screen hidden">
+
+  <!-- HUD superior -->
+  <div id="absenceNotif" class="absence-notif hidden">⚠️ El teu rival s'ha desconnectat…</div>
+  <div id="hud">
+    <div class="hud-left">
+      <span id="hudRoom" class="hud-pill">—</span>
+      <span id="hudSeat" class="hud-pill">—</span>
+    </div>
+    <div class="hud-center">
+      <span id="hudScore0" class="hud-score-num">0</span>
+      <span class="hud-score-sep">·</span>
+      <span id="hudScore1" class="hud-score-num">0</span>
+    </div>
+    <div class="hud-right">
+      <span id="hudState" class="hud-pill">—</span>
+      <button id="leaveBtn" class="hud-leave">Eixir</button>
+    </div>
+  </div>
+
+  <!-- Barra timer de turno -->
+  <div id="turnTimerBar"><div id="turnTimerFill"></div></div>
+
+  <!-- MESA -->
+  <div id="table">
+    <!-- Rival arriba -->
+    <div id="rivalZone">
+      <div class="rival-header">
+        <div class="player-avatar-wrap">
+          <div id="rivalAv" class="player-av-sm"></div>
+          <svg class="av-ring" id="rivalRing" viewBox="0 0 56 56">
+            <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
+            <circle id="rivalTimerArc" class="timer-ring-arc" cx="28" cy="28" r="25"/>
+          </svg>
+        </div>
+        <div id="rivalName" class="player-name">—</div>
+      </div>
+      <div id="rivalCards" class="rival-cards" data-count="0"></div>
+    </div>
+
+    <!-- Centro -->
+    <div id="centerZone">
+      <div class="trick-grid" id="trickGrid"></div>
+      <div id="centerInfo" class="center-info"></div>
+    </div>
+
+    <!-- Mi zona abajo -->
+    <div id="myZone">
+      <div id="myCards" class="my-cards"></div>
+      <div class="my-zone-header">
+        <div class="player-avatar-wrap">
+          <div id="myAv" class="player-av-sm"></div>
+          <svg class="av-ring" id="myRing" viewBox="0 0 56 56">
+            <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
+            <circle id="myTimerArc" class="timer-ring-arc" cx="28" cy="28" r="25"/>
+          </svg>
+        </div>
+        <div id="myName" class="player-name">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info lateral derecha (juego) -->
+  <div id="sideInfo">
+    <div class="si-block"><div class="si-lbl">Torn</div><div id="siMano">—</div></div>
+    <div class="si-block"><div class="si-lbl">Ronda</div><div id="siHand">0</div></div>
+  </div>
+
+  <!-- Registro izquierda -->
+  <div id="logPanel">
+    <div id="logToggle" class="log-toggle">▸ Registre</div>
+    <div id="logBody" class="log-body hidden"><div id="logArea"></div></div>
+  </div>
+
+  <!-- PANEL ACCIONES inferior -->
+  <div id="actionPanel">
+    <div id="offerMsg"    class="offer-msg hidden"></div>
+    <div id="actionBtns" class="action-btns">
+      <button id="envitBtn" class="abtn abtn-green" disabled>Envidar</button>
+      <button id="faltaBtn" class="abtn abtn-green" disabled>Falta envit</button>
+      <button id="trucBtn"  class="abtn abtn-gold"  disabled>Trucar</button>
+      <button id="mazoBtn"  class="abtn abtn-red"   disabled>Me'n vaig</button>
+    </div>
+    <div id="responseArea" class="response-area hidden"></div>
+    <div id="statusMsg"    class="status-msg">⏳ Esperant al segon jugador…</div>
+  </div>
+
+  <!-- ── CHAT ── -->
+  <div id="chatPanel">
+    <div id="chatToggle" class="chat-toggle">
+      💬 Xat <span id="chatBadge" class="chat-badge hidden">!</span>
+    </div>
+    <div id="chatBox" class="chat-box hidden">
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" placeholder="Escribe…" maxlength="120" autocomplete="off" />
+        <button id="chatSend" class="chat-send">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OVERLAY: SALA EN ESPERA (host ve botón de inicio) ── -->
+  <div id="waitingOverlay" class="overlay hidden">
+    <div class="overlay-card waiting-card">
+      <img src="Media/Images/Others/portada.png" alt="El Truc de la Terreta" class="waiting-portada" />
+      <div class="avatar-pick">
+        <div class="avatar-pick-lbl">Tria el teu avatar:</div>
+        <div class="avatar-options">
+          <div class="av-opt" data-av="0"><img src="Media/Images/Avatars/Avatar1.png" alt="Avatar 1"></div>
+          <div class="av-opt" data-av="1"><img src="Media/Images/Avatars/Avatar3.png" alt="Avatar 3"></div>
+          <div class="av-opt" data-av="2"><img src="Media/Images/Avatars/Avatar4.png" alt="Avatar 4"></div>
+          <div class="av-opt" data-av="3"><img src="Media/Images/Avatars/Avatar5.png" alt="Avatar 5"></div>
+          <div class="av-opt" data-av="4"><img src="Media/Images/Avatars/Avatar6.png" alt="Avatar 6"></div>
+          <div class="av-opt" data-av="5"><img src="Media/Images/Avatars/Avatar7.png" alt="Avatar 7"></div>
+          <div class="av-opt" data-av="6"><img src="Media/Images/Avatars/Avatar14.png" alt="Avatar 14"></div>
+          <div class="av-opt" data-av="7"><img src="Media/Images/Avatars/Avatar16.png" alt="Avatar 16"></div>
+        </div>
+      </div>
+      <div class="ov-title">Sala creada</div>
+      <div class="waiting-code-row">
+        <span class="waiting-code-lbl">Codi:</span>
+        <span id="waitingCode" class="waiting-code">—</span>
+      </div>
+      <div id="waitingStatus" class="waiting-status">Esperant el segon jugador…</div>
+      <button id="startBtn" class="lbtn lbtn-primary hidden" style="margin-top:8px;width:100%;font-size:18px;padding:15px;">
+        ▶ Iniciar partida
+      </button>
+      <button id="guestReadyBtn" class="lbtn lbtn-secondary hidden" style="margin-top:8px;width:100%;">
+        ✋ Estic preparat!
+      </button>
+      <div id="guestWaitMsg" class="waiting-note hidden"></div>
+      <div id="waitingNote" class="waiting-note"></div>
+    </div>
+  </div>
+
+  <!-- ── OVERLAY: ENTRE MANOS (resumen + 5 s) ── -->
+  <div id="countdownOverlay" class="overlay hidden">
+    <div class="overlay-card between-card">
+      <div class="ov-title">Resum de la mà</div>
+      <div id="countdownLabel" class="cd-summary"></div>
+      <div id="countdownNum" class="ov-num"></div>
+    </div>
+  </div>
+
+  <!-- ── OVERLAY: FIN PARTIDA ── -->
+  <div id="gameOverOverlay" class="overlay hidden">
+    <canvas id="confettiCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:99;"></canvas>
+    <div class="overlay-card go-card">
+      <div class="ov-title" id="goTitle">Partida acabada</div>
+      <div id="goWinner" class="go-winner">—</div>
+      <div id="goScore"  class="go-score">—</div>
+      <div class="go-btns" style="margin-top:20px;display:flex;flex-direction:column;gap:10px;width:100%;">
+        <button id="goRematchBtn" class="lbtn lbtn-primary" style="font-size:16px;padding:14px;">⚔️ Revancha</button>
+        <button id="goLeaveBtn"   class="lbtn lbtn-secondary">Eixir</button>
+      </div>
+      <div id="goRematchStatus" class="go-rematch-status"></div>
+    </div>
+  </div>
+
+</div><!-- /screenGame -->
+</body>
+</html>
