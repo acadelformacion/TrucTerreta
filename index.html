@@ -22,11 +22,11 @@
     <div class="lobby-card">
       <div class="lfield">
         <label for="nameInput">Nom</label>
-        <input id="nameInput" type="text" placeholder="Ej. Vicent" autocomplete="off" />
+        <input id="nameInput" type="text" placeholder="Ej. Joan" autocomplete="off" />
       </div>
       <div class="lfield">
         <label for="roomInput">Codi de sala</label>
-        <input id="roomInput" type="text" placeholder="Ej. K7Q2" autocomplete="off" maxlength="8" />
+        <input id="roomInput" type="text" placeholder="Ej. 1234" autocomplete="off" maxlength="8" />
       </div>
       <div class="lobby-btns">
         <button id="createBtn" class="lbtn lbtn-primary">Crear sala</button>
@@ -39,7 +39,18 @@
     <div class="lobby-rooms">
       <div class="rl-title">Sales obertes</div>
       <div id="roomList" class="room-list"></div>
-    </div>
+    
+      <div id="quickJoinModal" class="qj-modal hidden">
+        <div class="qj-content">
+            <h3>Entrar a <span id="qj-room-display"></span></h3>
+            <p>Introdueix el teu nom:</p>
+            <input type="text" id="qj-name-input" placeholder="Nick" maxlength="12">
+            <div class="qj-buttons">
+                <button id="qj-cancel" class="btn-qj-cancel">Eixir</button>
+                <button id="qj-confirm" class="btn-qj-confirm">Jugar!</button>
+            </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -156,14 +167,14 @@
       <div class="avatar-pick">
         <div class="avatar-pick-lbl">Tria el teu avatar:</div>
         <div class="avatar-options">
-          <div class="av-opt" data-av="0"><img src="Media/Images/Avatars/Avatar1.png" alt="Avatar 1"></div>
+          <div class="av-opt" data-av="0"><img src="Media/Images/Avatars/Avatar4.png" alt="Avatar 4"></div>
           <div class="av-opt" data-av="1"><img src="Media/Images/Avatars/Avatar3.png" alt="Avatar 3"></div>
-          <div class="av-opt" data-av="2"><img src="Media/Images/Avatars/Avatar4.png" alt="Avatar 4"></div>
-          <div class="av-opt" data-av="3"><img src="Media/Images/Avatars/Avatar5.png" alt="Avatar 5"></div>
-          <div class="av-opt" data-av="4"><img src="Media/Images/Avatars/Avatar6.png" alt="Avatar 6"></div>
-          <div class="av-opt" data-av="5"><img src="Media/Images/Avatars/Avatar7.png" alt="Avatar 7"></div>
-          <div class="av-opt" data-av="6"><img src="Media/Images/Avatars/Avatar14.png" alt="Avatar 14"></div>
-          <div class="av-opt" data-av="7"><img src="Media/Images/Avatars/Avatar16.png" alt="Avatar 16"></div>
+          <div class="av-opt" data-av="2"><img src="Media/Images/Avatars/Avatar1.png" alt="Avatar 1"></div>
+          <div class="av-opt" data-av="3"><img src="Media/Images/Avatars/Avatar14.png" alt="Avatar 14"></div>
+          <div class="av-opt" data-av="4"><img src="Media/Images/Avatars/Avatar16.png" alt="Avatar 16"></div>
+          <div class="av-opt" data-av="5"><img src="Media/Images/Avatars/Avatar6.png" alt="Avatar 6"></div>
+          <div class="av-opt" data-av="6"><img src="Media/Images/Avatars/Avatar7.png" alt="Avatar 7"></div>
+          <div class="av-opt" data-av="7"><img src="Media/Images/Avatars/Avatar5.png" alt="Avatar 5"></div>
         </div>
       </div>
       <div class="ov-title">Sala creada</div>
@@ -200,7 +211,7 @@
       <div id="goWinner" class="go-winner">—</div>
       <div id="goScore"  class="go-score">—</div>
       <div class="go-btns" style="margin-top:20px;display:flex;flex-direction:column;gap:10px;width:100%;">
-        <button id="goRematchBtn" class="lbtn lbtn-primary" style="font-size:16px;padding:14px;">⚔️ Revancha</button>
+        <button id="goRematchBtn" class="lbtn lbtn-primary" style="font-size:16px;padding:14px;">⚔️ Revenja</button>
         <button id="goLeaveBtn"   class="lbtn lbtn-secondary">Eixir</button>
       </div>
       <div id="goRematchStatus" class="go-rematch-status"></div>

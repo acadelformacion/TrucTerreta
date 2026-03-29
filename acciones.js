@@ -284,13 +284,11 @@ export async function timeoutTurn(){
         pushLog(state,'Temps. Envit rebutjat auto.');resumeOffer(state);return true;
       }
       if(h.pendingOffer.kind==='truc'){
-        // Quitamos el addSA de aquí también
         Logica.applyHandEnd(state, `Temps esgotat per a ${pName(state, session.mySeat)}.`, session.mySeat);
         return true;
       }
     }
     if(!alreadyPlayed(h,session.mySeat)&&h.mode==='normal'){
-      // Quitamos el addSA de aquí también
       Logica.applyHandEnd(state, `Temps esgotat per a ${pName(state, session.mySeat)}.`, session.mySeat);
       return true;
     }
@@ -312,18 +310,35 @@ export async function requestRematch(){
       state.winner=null;
       state.rematch={[K(0)]:false,[K(1)]:false};
       state.logs=[];
-      pushLog(state,'Revancha iniciada!');
+      pushLog(state,'Revenja iniciada!');
     }
     return true;
   });
 }
 
 export async function claimWinByRivalAbsence(){
-  await mutate(state=>{
-    if(state.status==='game_over')return false;
-    state.status='game_over';
-    state.winner=session.mySeat;
-    pushLog(state,pName(state,other(session.mySeat))+' ha abandonat. Guanyes!');
+  await mutate(state => {
+    if(state.status === 'game_over') return false;
+    
+    // Identificamos quién es el rival (el que se ha ido)
+    const rivalSeat = session.mySeat === 0 ? 1 : 0; 
+    const h = state.hand;
+
+    // 1. Si estábamos en mitad de una mano jugando puntos...
+    if(h && state.status === 'playing' && h.status === 'in_progress') {
+      const rivalName = state.players?.[rivalSeat]?.name || 'El rival';
+      
+      // Llamamos a tu lógica de "Me'n vaig" pasándole el asiento del rival.
+      // Esto calculará automáticamente los envites/trucs pendientes y te sumará los puntos.
+      Logica.applyHandEnd(state, `${rivalName} s'ha desconnectat. Abandona la mà.`, rivalSeat);
+      return true;
+    } 
+    
+    // 2. Si NO había mano en curso (estábais esperando a repartir) o ya se rindió de la mano
+    // y sigue desconectado, entonces sí reclamamos la victoria total de la partida.
+    state.status = 'game_over';
+    state.winner = session.mySeat;
+    pushLog(state, (state.players?.[rivalSeat]?.name || 'El rival') + ' ha abandonat la partida. Has guanyat!');
     return true;
   });
 }
@@ -332,7 +347,7 @@ export async function guestReady(){
   await mutate(state=>{
     if(!state.ready)state.ready={[K(0)]:false,[K(1)]:false};
     state.ready[K(session.mySeat)]=true;
-    pushLog(state,pName(state,session.mySeat)+' esta preparat!');
+    pushLog(state,pName(state,session.mySeat)+' està preparat!');
     return true;
   });
 }

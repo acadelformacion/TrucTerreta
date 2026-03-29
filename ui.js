@@ -236,23 +236,24 @@ function buildCard(card){
 function buildBack(){const el=document.createElement('div');el.className='card-back';return el;}
 
 // -- Show action label in center of table --------------------------------------
-function showTableMsg(text){
-  // Show locally
-  _showTableMsgLocal(text);
-  // Write to Firebase so rival sees it too
-  if(session.roomRef)set(ref(db,`rooms/${session.roomCode}/msg`),{text,at:Date.now()}).catch(()=>{});
-}
-function _showTableMsgLocal(text){
-  let el=$('tableMsgEl');
-  if(!el){
-    el=document.createElement('div');el.id='tableMsgEl';el.className='table-msg';
-    const cz=document.getElementById('centerZone');
-    if(cz)cz.appendChild(el);else document.body.appendChild(el);
+// --- Nueva función de mensajes con "Bocadillos" y sincronización ---
+export function showTableMsg(text, isMine = true) {
+  // A. PARTE VISUAL (Lo que ves tú)
+  const bubble = document.createElement('div');
+  bubble.className = `table-msg-bubble ${isMine ? 'msg-mine' : 'msg-rival'}`;
+  bubble.textContent = text.toUpperCase() + '!';
+  document.body.appendChild(bubble);
+
+  setTimeout(() => { if(bubble) bubble.remove(); }, 1800);
+
+  // B. PARTE DE RED (Solo si yo soy el que ha pulsado el botón)
+  if (isMine && session.roomCode) {
+    set(ref(db, `rooms/${session.roomCode}/msg`), {
+      text: text,
+      at: Date.now(),
+      sender: session.mySeat // <--- ESTO ES VITAL para el punto 1
+    }).catch(() => {});
   }
-  el.textContent=text+'!';
-  el.classList.remove('table-msg-anim');
-  void el.offsetWidth;
-  el.classList.add('table-msg-anim');
 }
 
 function animatePlay(cardEl,card,onDone){
@@ -513,9 +514,10 @@ function renderActions(state){
   if(!playing){
     eB.disabled=true; tB.disabled=true; mB.disabled=true;
     $('statusMsg').textContent=state.status==='waiting'?'Esperant...':'Partida acabada';
+    $('actionPanel').style.display = 'none';
     return;
   }
-
+  $('actionPanel').style.display = '';
   const myT=h.turn===session.mySeat, norm=h.mode==='normal', envDone=h.envit.state!=='none';
   const played=alreadyPlayed(h,session.mySeat);
   
@@ -570,13 +572,8 @@ function renderActions(state){
     ra.appendChild(b);
   };
 
-  // --- 1. FALTA DIRECTA (Cuando no hay oferta pero es mi turno de cartas) ---
-  if(!h.pendingOffer && norm && myT && envitOk){
-    ra.classList.remove('hidden');
-    add('Falta directa', 'abtn-gold', () => startOffer('falta'));
-  }
 
-  // --- 2. GESTIÓN DE OFERTAS PENDIENTES ---
+  // --- GESTIÓN DE OFERTAS PENDIENTES ---
   if(h.pendingOffer && h.turn===session.mySeat){
     om.textContent=h.pendingOffer.kind==='envit'
       ?(h.pendingOffer.level==='falta'?'Envit de falta':h.pendingOffer.level===4?'Torne (4)':'Envit')
@@ -618,7 +615,7 @@ function renderActions(state){
   sm.classList.remove('my-turn');
   if(played && !bothPlayed(h)) sm.textContent=`Esperant a ${pName(state,other(session.mySeat))}...`;
   else if(h.pendingOffer && h.turn!==session.mySeat) sm.textContent=`Esperant a ${pName(state,h.turn)}...`;
-  else if(!myT && !played) sm.textContent=`Turno de ${pName(state,h.turn)}`;
+  else if(!myT && !played) sm.textContent=`Torn de ${pName(state,h.turn)}`;
   else if(!played && norm && !h.pendingOffer){
     sm.textContent='El teu torn, tria carta o acció';
     sm.classList.add('my-turn');
@@ -700,6 +697,10 @@ function renderHUD(state){
   const turnPlayer=state.hand?pName(state,state.hand.turn):pName(state,state.mano);
   $('siMano').textContent=turnPlayer;
   $('siHand').textContent=String(real(state.handNumber||OFFSET));
+  // Controla que el panel inferior solo se fije en pantalla durante la partida
+  if ($('actionPanel')) {
+    $('actionPanel').classList.toggle('playing-mode', state.status === 'playing');
+  }
 }
 
 function renderLog(state){
@@ -964,8 +965,9 @@ function getRivalAvatar(){
 
 let _rivalAvatarIdx=-1;
 function getAvatarImg(idx) {
-  const i = Math.max(0, Math.min(idx, AVATAR_IMAGES.length - 1)); // Seguridad por si hay un índice raro
-  return `<img src="${AVATAR_IMAGES[i]}" alt="Avatar" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+  // Usamos el array de rutas que creamos antes
+  const src = AVATAR_IMAGES[idx] || AVATAR_IMAGES[0]; 
+  return `<img src="${src}" alt="Avatar">`;
 }
 function renderAvatars(room){
   const avs=room?.avatars||{};
@@ -987,28 +989,61 @@ function renderAvatars(room){
 }
 
 let unsubMsg=null;
-function startSession(code){
-  session.roomCode=code;session.roomRef=ref(db,`rooms/${code}`);
-  if(unsubGame)unsubGame();
-  unsubGame=onValue(session.roomRef,snap=>renderAll(snap.val()));
-  initChat(code);
-  // Listen for table messages (sent by either player)
-  if(unsubMsg)unsubMsg();
-  let lastMsgAt=0;
-  unsubMsg=onValue(ref(db,`rooms/${code}/msg`),snap=>{
-    const m=snap.val();
-    if(m&&m.at>lastMsgAt&&m.at>Date.now()-5000){
-      lastMsgAt=m.at;
-      _showTableMsgLocal(m.text);
+export function startSession(code){
+  session.roomCode = code;
+  session.roomRef = ref(db, `rooms/${code}`);
+
+  if(unsubGame) unsubGame();
+  
+  // 1. Escuchar cambios en la partida (Lobby o Mesa)
+  unsubGame = onValue(session.roomRef, snap => {
+    const data = snap.val();
+    if(!data) return;
+    
+    // Si NO hay estado (nadie ha dado a 'Repartir'), nos quedamos en el Lobby
+    if(!data.state) {
+      $('screenLobby').classList.remove('hidden');
+      $('screenGame').classList.add('hidden');
+    } else {
+      // Si YA hay estado de juego, vamos a la mesa
+      $('screenLobby').classList.add('hidden');
+      $('screenGame').classList.remove('hidden');
     }
+    
+    renderAll(data);
   });
-  // Presence: mark player as connected; on disconnect mark absent
-  if(session.mySeat!==null){
-    const presRef=ref(db,`rooms/${code}/presence/${K(session.mySeat)}`);
-    onDisconnect(presRef).set({absent:true,at:Date.now()});
-    set(presRef,{absent:false,at:Date.now()}).catch(()=>{});
+
+  // 2. Inicializar el Chat
+  initChat(code);
+
+  // 3. Escuchar los mensajes rápidos (Envite, Truco...)
+  if(unsubMsg) unsubMsg();
+let lastMsgAt = 0;
+
+unsubMsg = onValue(ref(db, `rooms/${code}/msg`), snap => {
+    const m = snap.val();
+    // 1. Si no hay mensaje o es el mismo de antes, ignorar
+    if(!m || m.at <= lastMsgAt) return;
+    
+    lastMsgAt = m.at;
+
+    // 2. Comprobar si han pasado menos de 5 segundos (para no ver gritos viejos al entrar)
+    if(m.at > Date.now() - 5000) {
+        // 3. COMPARACIÓN REAL: ¿El que envió el mensaje soy yo?
+        // Comparamos el sender del mensaje con mi asiento actual
+        const isMine = (m.sender === session.mySeat);
+        
+        // Lanzamos la animación
+        showTableMsg(m.text, isMine);
+    }
+});
+
+  // 4. Sistema de presencia (jugador conectado/desconectado)
+  if(session.mySeat !== null){
+    const presRef = ref(db, `rooms/${code}/presence/${K(session.mySeat)}`);
+    onDisconnect(presRef).set({absent: true, at: Date.now()});
+    set(presRef, {absent: false, at: Date.now()}).catch(()=>{});
   }
-  $('screenLobby').classList.add('hidden');$('screenGame').classList.remove('hidden');
 }
 function setLobbyMsg(txt,cls){const el=$('lobbyMsg');el.textContent=txt;el.className='lobby-msg'+(cls?' '+cls:'');}
 
@@ -1056,7 +1091,99 @@ async function leaveRoom(){
   if(session.roomRef&&session.mySeat!=null){try{await remove(ref(db,`rooms/${session.roomCode}/state/players/${K(session.mySeat)}`));}catch(e){}}
   localStorage.removeItem(LS.room);localStorage.removeItem(LS.seat);location.reload();
 }
+let _lastRoomListKey = '';
+let unsubRooms = null;
 
+function loadRoomList() {
+  const listEl = $('roomList');
+  if (!listEl) return;
+  if (unsubRooms) return; // ya escuchando
+
+  unsubRooms = onValue(ref(db, 'rooms'), snap => {
+    const rooms = snap.val();
+    const open = [];
+    if (rooms) {
+      for (const [code, room] of Object.entries(rooms)) {
+        const st = room?.state;
+        if (!st || st.status === 'game_over') continue;
+        const p0 = st.players?.[K(0)];
+        const p1 = st.players?.[K(1)];
+        if (p0 && !p1) {
+          const inactive = Date.now() - (room.lastActivity || 0) > 3600000;
+          if (!inactive) open.push({ code, host: p0.name });
+        }
+      }
+    }
+    open.sort((a, b) => a.code.localeCompare(b.code));
+    const newKey = open.map(r => r.code + r.host).join('|');
+    if (newKey === _lastRoomListKey) return;
+    _lastRoomListKey = newKey;
+    listEl.innerHTML = '';
+    if (!open.length) {
+      listEl.innerHTML = '<div class="rl-empty">Cap sala oberta</div>';
+      return;
+    }
+    open.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'rl-row';
+      row.innerHTML = `<div class="rl-info"><span class="rl-code">${r.code}</span><span class="rl-host">${r.host}</span></div><button class="lbtn lbtn-primary rl-join">Entrar</button>`;
+      row.querySelector('.rl-join').addEventListener('click', () => showQuickJoin(r.code, r.host));
+      listEl.appendChild(row);
+    });
+  });
+}
+/**
+ * Gestiona el acceso rápido desde la lista de salas abiertas.
+ * @param {string} code - El código de la sala (ej: 'ABCDE')
+ * @param {string} host - El nombre del creador (ej: 'Joan')
+ */
+function showQuickJoin(code, host) {
+  const modal = document.getElementById('quickJoinModal');
+  const qjNameInput = document.getElementById('qj-name-input');
+  const roomDisplay = document.getElementById('qj-room-display');
+
+  // 1. Mostrar modal y limpiar nombre
+  roomDisplay.innerText = code;
+  modal.classList.remove('hidden');
+  qjNameInput.value = ""; // Limpiamos por si acaso
+  qjNameInput.focus();
+
+  // 2. Al hacer clic en Jugar!
+  document.getElementById('qj-confirm').onclick = () => {
+      const nick = qjNameInput.value.trim();
+      
+      if (nick.length < 2) {
+          alert("Escriu un nom vàlid!");
+          return;
+      }
+
+      // RELLENAMOS TUS INPUTS REALES (del HTML que me has pasado)
+      const realNameInput = document.getElementById('nameInput');
+      const realRoomInput = document.getElementById('roomInput');
+      const realJoinBtn = document.getElementById('joinBtn');
+
+      if (realNameInput && realRoomInput && realJoinBtn) {
+          realNameInput.value = nick;
+          realRoomInput.value = code;
+          
+          // Ocultamos el modal
+          modal.classList.add('hidden');
+          
+          // ¡PULSÁMOS EL BOTÓN DE UNIRSE!
+          realJoinBtn.click();
+      } else {
+          console.error("No s'han trobat els IDs nameInput, roomInput o joinBtn");
+      }
+  };
+
+  // 3. Al hacer clic en Eixir
+  document.getElementById('qj-cancel').onclick = () => {
+      modal.classList.add('hidden');
+  };
+}
+
+// Muy importante para que el botón de la lista lo vea:
+window.showQuickJoin = showQuickJoin;
 // --- Boot: initApp ------------------------------------------------------------
 export function initApp(){
   configureActions({ renderAll });
@@ -1072,9 +1199,10 @@ export function initApp(){
     await guestReady();
   });
   $('startBtn').addEventListener('click',async()=>{sndBtn();$('waitingOverlay').classList.add('hidden');await dealHand();});
-  $('envitBtn').addEventListener('click',()=>{sndBtn();showTableMsg('Envide!');startOffer('envit');});
-  $('trucBtn').addEventListener('click',()=>{sndBtn();showTableMsg('Truque!');startOffer('truc');});
-  $('mazoBtn').addEventListener('click',()=>{sndBtn();showTableMsg('Me\'n vaig!');goMazo();});
+  $('envitBtn').onclick = () => { showTableMsg('¡Envide!', true); startOffer('envit'); };
+  $('faltaBtn').onclick = () => { showTableMsg('¡Falta Envit!', true); startOffer('envit', 'falta'); };
+  $('trucBtn').onclick = () => { showTableMsg('¡Truque!', true); startOffer('truc'); };
+  $('mazoBtn').onclick = () => { showTableMsg('¡Me\'n vaig!', true); goMazo(); };
   $('logToggle').addEventListener('click',()=>{
     const b=$('logBody');b.classList.toggle('hidden');
     $('logToggle').textContent=b.classList.contains('hidden')?'> Registro':'v Registro';
@@ -1106,6 +1234,7 @@ export function initApp(){
       localStorage.removeItem(LS.room);localStorage.removeItem(LS.seat);
     }
   })();
+  loadRoomList();
 }
 async function animatePoints(elementId, startValue, endValue) {
   const el = $(elementId);
@@ -1131,4 +1260,54 @@ async function animatePoints(elementId, startValue, endValue) {
     // Opcional: Sonido de "click" o "punto" si tienes uno
     // playSound('point'); 
   }
+}
+
+export function initRoomListListener() {
+    const listEl = document.getElementById('roomList');
+    if (!listEl) return;
+
+    // Si ya había un escuchador, lo cerramos para no duplicar
+    if (unsubRooms) unsubRooms();
+
+    // Escuchamos la carpeta 'rooms' de Firebase
+    unsubRooms = onValue(ref(db, 'rooms'), (snapshot) => {
+        const rooms = snapshot.val();
+        listEl.innerHTML = ''; // Limpiamos la lista actual
+
+        if (!rooms) {
+            listEl.innerHTML = '<div class="no-rooms">No hi ha sales obertes</div>';
+            return;
+        }
+
+        // Recorremos las salas encontradas
+        Object.keys(rooms).forEach(code => {
+            const room = rooms[code];
+            
+            // FILTRO: Solo mostrar si no ha empezado y solo hay 1 persona
+            const occupancy = room.presence ? Object.keys(room.presence).length : 0;
+            
+            if (!room.state && occupancy === 1) {
+                const item = document.createElement('div');
+                item.className = 'room-item';
+                item.innerHTML = `
+                    <span>Sala: <b>${code}</b></span>
+                    <button class="join-btn-list" data-code="${code}">Entrar</button>
+                `;
+                
+                // Evento para unirnos al hacer clic
+                item.querySelector('.join-btn-list').onclick = () => {
+                    const input = document.getElementById('roomCodeInput');
+                    if (input) input.value = code;
+                    // Disparamos el clic del botón de entrar que ya tienes
+                    document.getElementById('btnJoin')?.click();
+                };
+                
+                listEl.appendChild(item);
+            }
+        });
+
+        if (listEl.innerHTML === '') {
+            listEl.innerHTML = '<div class="no-rooms">Esperant sales noves...</div>';
+        }
+    });
 }
