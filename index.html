@@ -82,34 +82,37 @@
   <!-- Barra timer de turno -->
   <div id="turnTimerBar"><div id="turnTimerFill"></div></div>
 
-  <!-- MESA -->
   <div id="table">
-    <!-- Rival arriba -->
     <div id="rivalZone">
       <div class="rival-header">
         <div class="player-avatar-wrap">
+          <div id="rivalBubble" class="speech-bubble hidden"></div>
+          
           <div id="rivalAv" class="player-av-sm"></div>
           <svg class="av-ring" id="rivalRing" viewBox="0 0 56 56">
-            <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
+              <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
             <circle id="rivalTimerArc" class="timer-ring-arc" cx="28" cy="28" r="25"/>
           </svg>
-        </div>
+      </div>
         <div id="rivalName" class="player-name">—</div>
       </div>
       <div id="rivalCards" class="rival-cards" data-count="0"></div>
     </div>
-
-    <!-- Centro -->
+  
     <div id="centerZone">
       <div class="trick-grid" id="trickGrid"></div>
       <div id="centerInfo" class="center-info"></div>
     </div>
-
-    <!-- Mi zona abajo -->
+  
     <div id="myZone">
       <div id="myCards" class="my-cards"></div>
       <div class="my-zone-header">
-        <div class="player-avatar-wrap">
+        <div class="player-avatar-wrap" id="myAvatarContainer" onclick="toggleRadialMenu()">
+          
+          <div id="myBubble" class="speech-bubble hidden"></div>
+          
+          <div id="myRadialMenu" class="radial-menu"></div>
+  
           <div id="myAv" class="player-av-sm"></div>
           <svg class="av-ring" id="myRing" viewBox="0 0 56 56">
             <circle class="timer-ring-bg" cx="28" cy="28" r="25"/>
@@ -137,10 +140,10 @@
   <div id="actionPanel">
     <div id="offerMsg"    class="offer-msg hidden"></div>
     <div id="actionBtns" class="action-btns">
-      <button id="envitBtn" class="abtn abtn-green" disabled>Envidar</button>
-      <button id="faltaBtn" class="abtn abtn-green" disabled>Falta envit</button>
-      <button id="trucBtn"  class="abtn abtn-gold"  disabled>Trucar</button>
-      <button id="mazoBtn"  class="abtn abtn-red"   disabled>Me'n vaig</button>
+      <button id="envitBtn" class="abtn abtn-green action-btn hidden">Envidar</button>
+      <button id="faltaBtn" class="abtn abtn-green action-btn hidden">Falta envit</button>
+      <button id="trucBtn"  class="abtn abtn-gold  action-btn hidden">Trucar</button>
+      <button id="mazoBtn"  class="abtn abtn-red   action-btn hidden">Me'n vaig</button>
     </div>
     <div id="responseArea" class="response-area hidden"></div>
     <div id="statusMsg"    class="status-msg">⏳ Esperant al segon jugador…</div>
@@ -164,6 +167,7 @@
   <div id="waitingOverlay" class="overlay hidden">
     <div class="overlay-card waiting-card">
       <img src="Media/Images/Others/portada.png" alt="El Truc de la Terreta" class="waiting-portada" />
+      
       <div class="avatar-pick">
         <div class="avatar-pick-lbl">Tria el teu avatar:</div>
         <div class="avatar-options">
@@ -177,21 +181,32 @@
           <div class="av-opt" data-av="7"><img src="Media/Images/Avatars/Avatar5.png" alt="Avatar 5"></div>
         </div>
       </div>
+  
       <div class="ov-title">Sala creada</div>
+      
       <div class="waiting-code-row">
         <span class="waiting-code-lbl">Codi:</span>
         <span id="waitingCode" class="waiting-code">—</span>
       </div>
-      <div id="waitingStatus" class="waiting-status">Esperant el segon jugador…</div>
+  
+      <div id="waitingStatus" class="waiting-status">Esperant el segon jugador...</div>
+  
       <button id="startBtn" class="lbtn lbtn-primary hidden" style="margin-top:8px;width:100%;font-size:18px;padding:15px;">
         ▶ Iniciar partida
       </button>
+  
       <button id="guestReadyBtn" class="lbtn lbtn-secondary hidden" style="margin-top:8px;width:100%;">
         ✋ Estic preparat!
       </button>
-      <div id="guestWaitMsg" class="waiting-note hidden"></div>
+  
+      <div id="guestWaitMsg" class="waiting-note hidden" style="margin-top:10px; font-weight:bold;"></div>
       <div id="waitingNote" class="waiting-note"></div>
+  
+      <button id="backToMainBtn" onclick="location.reload()" class="btn-volver">
+        ⏪ Tornar a l'inici
+      </button>
     </div>
+  </div>
   </div>
 
   <!-- ── OVERLAY: ENTRE MANOS (resumen + 5 s) ── -->

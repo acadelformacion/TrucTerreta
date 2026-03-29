@@ -25,6 +25,103 @@ import {
   claimWinByRivalAbsence,
   guestReady
 } from './acciones.js';
+// --- SISTEMA DE FRASES GLOBAL (Al principio del archivo) ---
+window.canChat = true;
+window.mySelectedPhrases = [];
+
+const radialPhrasesList = [
+  "⚔️ Ara sí que va de bo!", "🏅Hui no fas ni un punt.", "🌿 Açò és mel de romer.",
+  "💣 Va, que esta cau.", "💰 Esta mà val or.", "🖐️ Vine, vine, que t'espere.",
+  "🦁 A vore si tens valor.", "😳 Això és tot el que portes?", "🔝 De categoria.",
+  "😲 No me l’esperava.", "🏟️ Ací encara hi ha partida.", "🧱 Has vingut a fer bulto.",
+  "👵 Ma huela havera jugat millor!", "🙊 No tens res i ho saps.", "🥚 Ara apreta el botó si tens collons.",
+  "🐔 Tens por o què?", "🍀 Xe, quina potra que tens!", "👿 Redeu, quines cartes m’has donat!",
+  "📉 Hui no en guanye ni una!", "🤡 Això és un 'vull i no puc'.", "👣 Hui t’has alçat amb el peu esquerre.",
+  "🤥 Mal farol has soltat!", "🧐 Això no t'ho creus ni tu!", "🌙 Tira ja que es fa de nit!"
+];
+window.initChatPhrases = function() {
+  const menu = document.getElementById('myRadialMenu');
+  if (!menu) return;
+
+  window.mySelectedPhrases = [...radialPhrasesList].sort(() => 0.5 - Math.random()).slice(0, 8);
+  
+  menu.innerHTML = '';
+  window.mySelectedPhrases.forEach((phrase, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'radial-option';
+    btn.textContent = phrase;
+    
+    // ÁNGULO NUEVO: De -110 (arriba) a -10 (derecha media). 
+    // Así evitamos que bajen hacia la barra inferior.
+    const angle = -110 + (i * (100 / 7)); 
+    const radius = 95; // Más cerca del avatar (antes 130)
+    
+    const x = Math.cos(angle * Math.PI / 180) * radius;
+    const y = Math.sin(angle * Math.PI / 180) * radius;
+
+    btn.style.left = x + "px";
+    btn.style.top = y + "px";
+    
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      window.sendPhrase(phrase);
+    };
+    menu.appendChild(btn);
+  });
+};
+
+window.sendPhrase = function(text) {
+  if (!window.canChat) return;
+
+  // 1. Mostrar en MI pantalla
+  window.showBubble('myBubble', text);
+  
+  // 2. ENVIAR AL RIVAL
+if (typeof socket !== 'undefined') {
+  socket.emit('enviar_frase', { frase: text });
+}
+
+// 3. RECIBIR DEL RIVAL (Pégalo aquí mismo)
+if (typeof socket !== 'undefined') {
+  socket.on('recibir_frase', (data) => {
+      if (window.showBubble) {
+          window.showBubble('rivalBubble', data.frase);
+      }
+  });
+}
+
+  // 4. Cerrar menú y bloquear 10s
+  const menu = document.getElementById('myRadialMenu');
+  if(menu) menu.classList.remove('active');
+  
+  window.canChat = false;
+  const myAv = document.getElementById('myAv');
+  if(myAv) myAv.classList.add('av-frozen');
+
+  setTimeout(() => { 
+    const b = document.getElementById('myBubble');
+    if(b) b.classList.add('hidden'); 
+  }, 3500);
+
+  setTimeout(() => {
+    window.canChat = true;
+    if(myAv) myAv.classList.remove('av-frozen');
+  }, 10000);
+};
+
+// 3. RECIBIR DEL RIVAL
+// Esta función debes llamarla cuando el servidor te avise de que el rival habló
+window.recibirFraseRival = function(text) {
+    window.showBubble('rivalBubble', text);
+};
+
+window.showBubble = function(id, text) {
+    const bubble = document.getElementById(id);
+    if (!bubble) return;
+    bubble.textContent = text;
+    bubble.classList.remove('hidden');
+    setTimeout(() => bubble.classList.add('hidden'), 3500);
+}
 
 // --- Key helpers --------------------------------------------------------------
 const K  = n => `_${n}`;          // seat: 0->"_0"
@@ -89,7 +186,7 @@ let _prevHandsKey='';  // tracks hand cards state
 let _prevTrickKey='';  // tracks trick cards state
 let _prevHandKey='';   // tracks which hand we're in
 let _lastCompletedTricks=null; // snapshot of trick cards to show during countdown
-
+window.initChatPhrases();
 const $=id=>document.getElementById(id);
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 const sanitize=s=>String(s||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
@@ -502,125 +599,121 @@ function renderTrick(state){
     info.appendChild(dots);
   }
 }
+function renderActions(state) {
+  const h = state.hand;
+  const eB = $('envitBtn'), tB = $('trucBtn'), mB = $('mazoBtn'), fB = $('faltaBtn');
+  const ra = $('responseArea'), om = $('offerMsg');
 
-function renderActions(state){
-  const h=state.hand;
-  const eB=$('envitBtn'), tB=$('trucBtn'), mB=$('mazoBtn');
-  const ra=$('responseArea'), om=$('offerMsg');
-  
-  ra.innerHTML=''; ra.classList.add('hidden'); om.classList.add('hidden');
-  
-  const playing=state.status==='playing' && h?.status==='in_progress';
-  if(!playing){
-    eB.disabled=true; tB.disabled=true; mB.disabled=true;
-    $('statusMsg').textContent=state.status==='waiting'?'Esperant...':'Partida acabada';
+  // 1. Limpieza inicial
+  if (ra) { ra.innerHTML = ''; ra.classList.add('hidden'); }
+  if (om) { om.classList.add('hidden'); }
+
+  const playing = state.status === 'playing' && h?.status === 'in_progress';
+  if (!playing) {
+    ['envitBtn', 'faltaBtn', 'trucBtn', 'mazoBtn'].forEach(id => {
+      const b = $(id); if (b) b.classList.add('hidden');
+    });
+    $('statusMsg').textContent = state.status === 'waiting' ? 'Esperant...' : 'Partida acabada';
     $('actionPanel').style.display = 'none';
     return;
   }
+
   $('actionPanel').style.display = '';
-  const myT=h.turn===session.mySeat, norm=h.mode==='normal', envDone=h.envit.state!=='none';
-  const played=alreadyPlayed(h,session.mySeat);
-  
-  // Lógica de disponibilidad de Envit/Falta
-  const noTricksPlayed=(h.trickHistory||[]).length===0;
-  const iHaventPlayed=!alreadyPlayed(h,session.mySeat);
-  const noTrucAtAll=h.truc.state==='none' && !(h.pendingOffer?.kind==='truc');
-  
-  // Se puede envidar si es el principio de la mano y no se ha hecho ya
-  const envitAvailNow=h.envitAvailable && noTricksPlayed && iHaventPlayed && !envDone && noTrucAtAll;
-  const canEnvitInTruc=h.envitAvailable && noTricksPlayed && iHaventPlayed && !envDone && h.mode==='respond_truc';
-  const envitOk=envitAvailNow || canEnvitInTruc;
+  const myT = h.turn === session.mySeat, norm = h.mode === 'normal', envDone = h.envit.state !== 'none';
+  const played = alreadyPlayed(h, session.mySeat);
 
-  // Botones laterales/fijos
-  eB.disabled=!envitOk || !myT || !!h.pendingOffer;
-  
-  const trucPending=!!h.pendingOffer && h.pendingOffer.kind==='truc';
-  const trucNone=h.truc.state==='none';
-  const trucAccepted=h.truc.state==='accepted';
-  const trucLevel=Number(h.truc.acceptedLevel||0);
-  const iAccepted=trucAccepted && h.truc.acceptedBy===session.mySeat;
-  const canEscalate=iAccepted && trucLevel<4;
+  const noTricksPlayed = (h.trickHistory || []).length === 0;
+  const iHaventPlayed = !alreadyPlayed(h, session.mySeat);
+  const noTrucAtAll = h.truc.state === 'none' && !(h.pendingOffer?.kind === 'truc');
 
-  tB.disabled=played || !myT || !norm || trucPending || (!trucNone && !canEscalate);
-  if(tB && !tB.disabled){
-    tB.textContent=canEscalate ? (trucLevel===2?'Retrucar':'Val 4') : 'Trucar';
-  } else if(tB){
-    tB.textContent='Trucar';
-  }
+  const envitAvailNow = h.envitAvailable && noTricksPlayed && iHaventPlayed && !envDone && noTrucAtAll;
+  const canEnvitInTruc = h.envitAvailable && noTricksPlayed && iHaventPlayed && !envDone && h.mode === 'respond_truc';
+  const envitOk = envitAvailNow || canEnvitInTruc;
 
-  // --- NUEVA LÓGICA DE BLOQUEO PARA "ME'N VAIG" ---
   const nadieHaJugado = !alreadyPlayed(h, 0) && !alreadyPlayed(h, 1);
   const sinApuestasPrevias = h.envit.state === 'none' && h.truc.state === 'none';
-  // Bloqueamos si es la primera baza, nadie ha tirado y no hay puntos ya en juego
   const bloqueoInicio = noTricksPlayed && nadieHaJugado && sinApuestasPrevias;
 
-  mB.disabled = played || !myT || !norm || !!h.pendingOffer || bloqueoInicio;
-  
-  // Detalle visual: mensaje al pasar el ratón
-  if (bloqueoInicio && myT) {
-    mB.title = "Has de jugar la primera carta o fer una aposta abans d'anar-te'n";
-  } else {
-    mB.title = "";
-  }
-  // ------------------------------------------------
+  // 2. Ocultar todos los botones fijos primero
+  ['envitBtn', 'faltaBtn', 'trucBtn', 'mazoBtn'].forEach(id => {
+    const b = $(id); if (b) b.classList.add('hidden');
+  });
 
-  // Helper para añadir botones al área de respuesta
-  const add=(l,cls,fn)=>{
-    const b=document.createElement('button');
-    b.textContent=l; b.className=`abtn ${cls}`;
-    b.addEventListener('click',()=>{sndBtn(); showTableMsg(l); fn();});
+  // Helper para añadir botones dinámicos (Vull, No vull, etc.)
+  const add = (l, cls, fn) => {
+    const b = document.createElement('button');
+    b.textContent = l; b.className = `abtn ${cls} action-btn`;
+    b.addEventListener('click', () => { sndBtn(); showTableMsg(l); fn(); });
     ra.appendChild(b);
   };
 
+  // 3. LÓGICA DE BOTONES DINÁMICOS
+  if (h.pendingOffer && h.turn === session.mySeat) {
+    // CASO A: Me han cantado algo (Responder)
+    om.textContent = h.pendingOffer.kind === 'envit'
+      ? (h.pendingOffer.level === 'falta' ? 'Envit de falta' : h.pendingOffer.level === 4 ? 'Torne (4)' : 'Envit')
+      : (h.pendingOffer.level === 3 ? 'Retruque' : h.pendingOffer.level === 4 ? 'Val 4' : 'Truc');
 
-  // --- GESTIÓN DE OFERTAS PENDIENTES ---
-  if(h.pendingOffer && h.turn===session.mySeat){
-    om.textContent=h.pendingOffer.kind==='envit'
-      ?(h.pendingOffer.level==='falta'?'Envit de falta':h.pendingOffer.level===4?'Torne (4)':'Envit')
-      :(h.pendingOffer.level===3?'Retruque':h.pendingOffer.level===4?'Val 4':'Truc');
-    
     om.classList.remove('hidden');
     ra.classList.remove('hidden');
 
-    if(h.pendingOffer.kind==='envit'){
-      // Respuestas a un ENVITE
-      add('Vull','abtn-green',()=>respondEnvit('vull'));
-      add('No vull','abtn-red',()=>respondEnvit('no_vull'));
-      
-      const nivelActual = h.pendingOffer.level === 'falta' ? 10 : Number(h.pendingOffer.level);
-      
-      if(nivelActual === 2){
-        add('Torne','abtn-gold',()=>respondEnvit('torne'));
-        add('Falta','abtn-gold',()=>respondEnvit('falta'));
-      } else if(nivelActual === 4){
-        add('Falta','abtn-gold',()=>respondEnvit('falta'));
+    if (h.pendingOffer.kind === 'envit') {
+      add('Vull', 'abtn-green', () => respondEnvit('vull'));
+      add('No vull', 'abtn-red', () => respondEnvit('no_vull'));
+      const niv = h.pendingOffer.level === 'falta' ? 10 : Number(h.pendingOffer.level);
+      if (niv === 2) {
+        add('Torne', 'abtn-gold', () => respondEnvit('torne'));
+        add('Falta', 'abtn-gold', () => respondEnvit('falta'));
+      } else if (niv === 4) {
+        add('Falta', 'abtn-gold', () => respondEnvit('falta'));
       }
     } else {
-      // Respuestas a un TRUC (Aquí permitimos cruzar con Envit/Falta)
-      if(envitOk){
-        add('Envidar','abtn-green',()=>startOffer('envit'));
-        add('Falta','abtn-gold',()=>startOffer('falta'));
+      if (envitOk) {
+        add('Envidar', 'abtn-green', () => startOffer('envit'));
+        add('Falta', 'abtn-gold', () => startOffer('falta'));
       }
-      
-      add('Vull','abtn-green',()=>respondTruc('vull'));
-      add('No vull','abtn-red',()=>respondTruc('no_vull'));
-      
-      if(h.pendingOffer.level===2) add('Retruque','abtn-gold',()=>respondTruc('retruque'));
-      if(h.pendingOffer.level===3) add('Val 4','abtn-gold',()=>respondTruc('val4'));
+      add('Vull', 'abtn-green', () => respondTruc('vull'));
+      add('No vull', 'abtn-red', () => respondTruc('no_vull'));
+      if (h.pendingOffer.level === 2) add('Retruque', 'abtn-gold', () => respondTruc('retruque'));
+      if (h.pendingOffer.level === 3) add('Val 4', 'abtn-gold', () => respondTruc('val4'));
+    }
+  } else if (myT && norm) {
+    // CASO B: Es mi turno normal (Cantar)
+    if (envitOk) {
+      if ($('envitBtn')) $('envitBtn').classList.remove('hidden');
+      if ($('faltaBtn')) $('faltaBtn').classList.remove('hidden');
+    }
+    if (!played) {
+      const trucNone = h.truc.state === 'none';
+      const iAccepted = h.truc.state === 'accepted' && h.truc.acceptedBy === session.mySeat;
+      const canEscalate = iAccepted && Number(h.truc.acceptedLevel || 0) < 4;
+      if (trucNone || canEscalate) {
+        const tb = $('trucBtn');
+        if (tb) {
+          tb.textContent = canEscalate ? (Number(h.truc.acceptedLevel || 0) === 2 ? 'Retrucar' : 'Val 4') : 'Trucar';
+          tb.classList.remove('hidden');
+        }
+      }
+      if (!bloqueoInicio && $('mazoBtn')) $('mazoBtn').classList.remove('hidden');
     }
   }
 
-  // Mensajes de estado (Turnos)
-  const sm=$('statusMsg'); 
-  sm.classList.remove('my-turn');
-  if(played && !bothPlayed(h)) sm.textContent=`Esperant a ${pName(state,other(session.mySeat))}...`;
-  else if(h.pendingOffer && h.turn!==session.mySeat) sm.textContent=`Esperant a ${pName(state,h.turn)}...`;
-  else if(!myT && !played) sm.textContent=`Torn de ${pName(state,h.turn)}`;
-  else if(!played && norm && !h.pendingOffer){
-    sm.textContent='El teu torn, tria carta o acció';
-    sm.classList.add('my-turn');
-  } else {
-    sm.textContent='';
+  // 4. MENSAJES DE ESTADO (TURNOS) - ¡Esto es lo que faltaba dentro!
+  const sm = $('statusMsg');
+  if (sm) {
+    sm.classList.remove('my-turn');
+    if (played && !bothPlayed(h)) {
+      sm.textContent = `Esperant a ${pName(state, other(session.mySeat))}...`;
+    } else if (h.pendingOffer && h.turn !== session.mySeat) {
+      sm.textContent = `Esperant a ${pName(state, h.turn)}...`;
+    } else if (!myT && !played) {
+      sm.textContent = `Torn de ${pName(state, h.turn)}`;
+    } else if (!played && norm && !h.pendingOffer) {
+      sm.textContent = 'El teu torn, tria carta o acció';
+      sm.classList.add('my-turn');
+    } else {
+      sm.textContent = '';
+    }
   }
 }
 
@@ -804,43 +897,68 @@ function renderAll(room){
     stopConfetti();
   }
   }// end else
-
   if(state.status==='waiting'){
     stopTurnTimer();
     if(real(state.handNumber||OFFSET)===0){
       stopBetween();
       $('waitingCode').textContent=session.roomCode||'-';
-      const p0ready=!!(state.ready?.[K(0)]);
-      const p1ready=!!(state.ready?.[K(1)]);
-      const myReady=session.mySeat===0?p0ready:p1ready;
-      const rivReady=session.mySeat===0?p1ready:p0ready;
-      if(ready){
-        const rivName=pName(state,other(session.mySeat));
-        const readyTxt=rivReady?`${rivName} esta preparat!`:'Esperant que els jugadors estiguen preparats...';
-        $('waitingStatus').textContent=readyTxt;
-      }else{
-        $('waitingStatus').textContent='Esperant el segon jugador...';
+      
+      const p0ready = !!(state.ready?.[K(0)]); // Host listo
+      const p1ready = !!(state.ready?.[K(1)]); // Invitado listo
+      const myReady = session.mySeat===0 ? p0ready : p1ready;
+      const rivReady = session.mySeat===0 ? p1ready : p0ready;
+      const rivName = pName(state, other(session.mySeat));
+
+      // --- MENSAJE PRINCIPAL DEL OVERLAY ---
+      if(!ready) {
+        // Falta que entre el segundo jugador
+        $('waitingStatus').innerHTML = 'Esperant el segon jugador<span class="dots"></span>';
+      } else {
+        // Ya están los dos. Mostramos si el rival está listo o no.
+        $('waitingStatus').innerHTML = rivReady 
+            ? `${rivName} està preparat!` 
+            : `Esperant que ${rivName} estiga preparat<span class="dots"></span>`;
       }
-      // Only host (seat 0) sees Start button; guest sees ready button + waiting msg
-      if(session.mySeat===0){
-        $('startBtn').classList.toggle('hidden',!ready);
-        $('waitingNote').textContent='';
+
+      // --- LÓGICA POR ASIENTOS ---
+      if(session.mySeat === 0){
+        // SOY EL CREADOR (Host)
+        $('startBtn').classList.toggle('hidden', !ready); // Solo aparece si hay 2 jugadores
+        
+        // El botón se deshabilita si el invitado (p1) no ha dado a "Preparat"
+        const sB = $('startBtn');
+        sB.disabled = !p1ready;
+        sB.title = !p1ready ? "Falta que l'altre jugador estiga preparat" : "";
+        sB.style.opacity = !p1ready ? "0.5" : "1";
+        sB.style.cursor = !p1ready ? "not-allowed" : "pointer";
+
         $('guestReadyBtn').classList.add('hidden');
         $('guestWaitMsg').classList.add('hidden');
-      }else{
+      } else {
+        // SOY EL INVITADO (Guest)
         $('startBtn').classList.add('hidden');
+        
+        // Si NO he pulsado listo: veo el botón
         $('guestReadyBtn').classList.toggle('hidden', myReady);
-        $('guestWaitMsg').classList.toggle('hidden', !myReady);
-        $('guestWaitMsg').textContent=myReady?'Esperant que el creador inicie...':'';
-        $('waitingNote').textContent='';
+        
+        // Si SÍ he pulsado listo: veo el mensaje de espera al creador
+        const gW = $('guestWaitMsg');
+        gW.classList.toggle('hidden', !myReady);
+        if(myReady) {
+            gW.innerHTML = 'Esperant que el creador inicie la partida<span class="dots"></span>';
+        }
       }
+      
+      // Mostrar el botón de volver siempre que estemos en el waiting
+      $('backToMainBtn').classList.remove('hidden'); 
       $('waitingOverlay').classList.remove('hidden');
-    }else{
+
+    } else {
       $('waitingOverlay').classList.add('hidden');
-      if(ready&&betweenTimer===null)startBetween(buildScoreSummary(state));
+      if(ready && betweenTimer===null) startBetween(buildScoreSummary(state));
     }
     return;
-  }
+}
   $('waitingOverlay').classList.add('hidden');stopBetween();
 
   const h=state.hand;
@@ -1199,10 +1317,10 @@ export function initApp(){
     await guestReady();
   });
   $('startBtn').addEventListener('click',async()=>{sndBtn();$('waitingOverlay').classList.add('hidden');await dealHand();});
-  $('envitBtn').onclick = () => { showTableMsg('¡Envide!', true); startOffer('envit'); };
-  $('faltaBtn').onclick = () => { showTableMsg('¡Falta Envit!', true); startOffer('envit', 'falta'); };
-  $('trucBtn').onclick = () => { showTableMsg('¡Truque!', true); startOffer('truc'); };
-  $('mazoBtn').onclick = () => { showTableMsg('¡Me\'n vaig!', true); goMazo(); };
+  $('envitBtn').onclick = () => { showTableMsg('Envide!', true); startOffer('envit'); };
+  $('faltaBtn').onclick = () => { showTableMsg('Falta!', true); startOffer('envit', 'falta'); };
+  $('trucBtn').onclick = () => { showTableMsg('Truque!', true); startOffer('truc'); };
+  $('mazoBtn').onclick = () => { showTableMsg('Me\'n vaig!', true); goMazo(); };
   $('logToggle').addEventListener('click',()=>{
     const b=$('logBody');b.classList.toggle('hidden');
     $('logToggle').textContent=b.classList.contains('hidden')?'> Registro':'v Registro';
