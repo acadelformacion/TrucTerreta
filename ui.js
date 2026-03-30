@@ -198,7 +198,7 @@ window.initChatPhrases();
 const $=id=>document.getElementById(id);
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 const sanitize=s=>String(s||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
-const normName=s=>String(s||'').trim().slice(0,24)||'Invitado';
+const normName=s=>String(s||'').trim().slice(0,24)||'Convidat';
 const other=s=>s===0?1:0;
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const real=n=>Number(n||OFFSET)-OFFSET; // decode stored value
@@ -651,7 +651,15 @@ function renderActions(state) {
   const add = (l, cls, fn) => {
     const b = document.createElement('button');
     b.textContent = l; b.className = `abtn ${cls} action-btn`;
-    b.addEventListener('click', () => { sndBtn(); showTableMsg(l); fn(); });
+    b.addEventListener('click', async () => {
+      if(_actionInProgress) return;   // ← bloquea dobles clicks
+      _actionInProgress = true;
+      sndBtn();
+      showTableMsg(l);
+      try { await fn(); } finally {
+        setTimeout(() => { _actionInProgress = false; }, 1500); // ← libera tras 1.5s
+      }
+    });
     ra.appendChild(b);
   };
 
@@ -667,21 +675,15 @@ function renderActions(state) {
     if (h.pendingOffer.kind === 'envit') {
       add('Vull', 'abtn-green', () => respondEnvit('vull'));
       add('No vull', 'abtn-red', () => respondEnvit('no_vull'));
-      
-      // Comprobamos si es falta (haciéndolo a prueba de fallos por si el texto llega en mayúsculas)
-      const levelStr = String(h.pendingOffer.level).toLowerCase();
-      const isFalta = levelStr === 'falta' || (h.envit && h.envit.state === 'falta');
-      
-      // Solo mostramos los botones de subida si NO es una falta
-      if (!isFalta) {
-        const niv = Number(h.pendingOffer.level);
-        if (niv === 2) {
-          add('Torne', 'abtn-gold', () => respondEnvit('torne'));
-          add('Falta', 'abtn-gold', () => respondEnvit('falta'));
-        } else if (niv === 4) {
-          add('Falta', 'abtn-gold', () => respondEnvit('falta'));
-        }
+    
+      const lvl = h.pendingOffer.level;
+      if (lvl === 2) {
+        add('Torne', 'abtn-gold', () => respondEnvit('torne'));
+        add('Falta', 'abtn-gold', () => respondEnvit('falta'));
+      } else if (lvl === 4) {
+        add('Falta', 'abtn-gold', () => respondEnvit('falta'));
       }
+      // lvl === 'falta' → solo Vull/No vull, nada más
     } else {
       if (envitOk) {
         add('Envidar', 'abtn-green', () => startOffer('envit'));
@@ -1098,9 +1100,8 @@ function getRivalAvatar(){
 
 let _rivalAvatarIdx=-1;
 function getAvatarImg(idx) {
-  // Usamos el array de rutas que creamos antes
-  const src = AVATAR_IMAGES[idx] || AVATAR_IMAGES[0]; 
-  return `<img src="${src}" alt="Avatar">`;
+  if (idx < 0 || idx >= AVATAR_IMAGES.length) return ''; // sin avatar → vacío
+  return `<img src="${AVATAR_IMAGES[idx]}" alt="Avatar">`;
 }
 function renderAvatars(room){
   const avs=room?.avatars||{};
@@ -1128,30 +1129,33 @@ export function startSession(code){
 
   if(unsubGame) unsubGame();
   
-  // 1. Escuchar cambios en la partida (Lobby o Mesa)
+  let chatRivalActivado = false; // ← flag para suscribir solo una vez
+
   unsubGame = onValue(session.roomRef, snap => {
     const data = snap.val();
     if(!data) return;
     
-    // Si NO hay estado (nadie ha dado a 'Repartir'), nos quedamos en el Lobby
     if(!data.state) {
       $('screenLobby').classList.remove('hidden');
       $('screenGame').classList.add('hidden');
     } else {
-      // Si YA hay estado de juego, vamos a la mesa
       $('screenLobby').classList.add('hidden');
       $('screenGame').classList.remove('hidden');
+
+      // ← Activar escucha del rival solo la primera vez
+      if (!chatRivalActivado) {
+        chatRivalActivado = true;
+        window.activarChatRival();
+      }
     }
     
     renderAll(data);
   });
 
-  // 2. Inicializar el Chat
   initChat(code);
 
-  // 3. Escuchar los mensajes rápidos (Envite, Truco...)
   if(unsubMsg) unsubMsg();
-let lastMsgAt = 0;
+  let lastMsgAt = 0;
 
 unsubMsg = onValue(ref(db, `rooms/${code}/msg`), snap => {
     const m = snap.val();
@@ -1216,7 +1220,7 @@ async function joinRoom(){
   const p0=fs.players?.[K(0)],p1=fs.players?.[K(1)];
   if(p1?.name===name&&p0?.name!==name)session.mySeat=1;
   else if(p0?.name===name)session.mySeat=0;else session.mySeat=1;
-  saveLS(name,code,session.mySeat);setLobbyMsg(`Unit com J${session.mySeat}.`,'good');startSession(code);
+  saveLS(name,code,session.mySeat);set(ref(db,`rooms/${code}/avatars/${K(session.mySeat)}`), myAvatar).catch(()=>{});setLobbyMsg(`Unit com J${session.mySeat}.`,'good');startSession(code);
 }
 async function leaveRoom() {
   // 1. Paramos cronómetros
@@ -1350,10 +1354,41 @@ export function initApp(){
     await guestReady();
   });
   $('startBtn').addEventListener('click',async()=>{sndBtn();$('waitingOverlay').classList.add('hidden');await dealHand();});
-  $('envitBtn').onclick = () => { showTableMsg('Envide!', true); startOffer('envit'); };
-  $('faltaBtn').onclick = () => { showTableMsg('Falta!', true); startOffer('envit', 'falta'); };
-  $('trucBtn').onclick = () => { showTableMsg('Truque!', true); startOffer('truc'); };
-  $('mazoBtn').onclick = () => { showTableMsg('Me\'n vaig!', true); goMazo(); };
+
+  /* Botones de acció principals — amb guard antidoble-click */
+  $('envitBtn').onclick = async () => {
+    if(_actionInProgress) return;
+    _actionInProgress = true;
+    sndBtn(); showTableMsg('Envide!', true);
+    try { await startOffer('envit'); } finally {
+      setTimeout(() => { _actionInProgress = false; }, 1500);
+    }
+  };
+  $('faltaBtn').onclick = async () => {
+    if(_actionInProgress) return;
+    _actionInProgress = true;
+    sndBtn(); showTableMsg('Falta!', true);
+    try { await startOffer('falta'); } finally {
+      setTimeout(() => { _actionInProgress = false; }, 1500);
+    }
+  };
+  $('trucBtn').onclick = async () => {
+    if(_actionInProgress) return;
+    _actionInProgress = true;
+    sndBtn(); showTableMsg('Truque!', true);
+    try { await startOffer('truc'); } finally {
+      setTimeout(() => { _actionInProgress = false; }, 1500);
+    }
+  };
+  $('mazoBtn').onclick = async () => {
+    if(_actionInProgress) return;
+    _actionInProgress = true;
+    sndBtn(); showTableMsg("Me'n vaig!", true);
+    try { await goMazo(); } finally {
+      setTimeout(() => { _actionInProgress = false; }, 1500);
+    }
+  };
+
   $('logToggle').addEventListener('click',()=>{
     const b=$('logBody');b.classList.toggle('hidden');
     $('logToggle').textContent=b.classList.contains('hidden')?'> Registro':'v Registro';
@@ -1462,3 +1497,30 @@ export function initRoomListListener() {
         }
     });
 }
+// ── TOGGLE MENÚ RADIAL ──────────────────────────────
+window.toggleRadialMenu = function() {
+  if (!window.canChat) return; // Si está bloqueado, no abrir
+
+  const menu = document.getElementById('myRadialMenu');
+  if (!menu) return;
+
+  const isOpen = menu.classList.contains('active');
+
+  if (isOpen) {
+    menu.classList.remove('active');
+  } else {
+    window.initChatPhrases(); // Regenera frases aleatorias cada vez
+    menu.classList.add('active');
+  }
+};
+
+// Cerrar el menú si se hace click fuera
+document.addEventListener('click', function(e) {
+  const container = document.getElementById('myAvatarContainer');
+  const menu = document.getElementById('myRadialMenu');
+  if (!menu || !container) return;
+  if (!container.contains(e.target)) {
+    menu.classList.remove('active');
+  }
+});
+let _actionInProgress = false;

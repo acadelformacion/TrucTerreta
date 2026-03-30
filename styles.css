@@ -116,12 +116,18 @@ h1 .hi { color: var(--gold); }
 
 /* ══ TABLE ══════════════════════════════ */
 #table {
-  position: fixed; top: 59px; bottom: 0; left: 0; right: 0; padding-bottom: 110px;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: space-between;
-  padding: 14px 20px 10px;
-  background: radial-gradient(ellipse 90% 70% at 50% 50%, var(--felt3) 0%, var(--felt) 60%, var(--bg) 100%);
-  overflow: hidden;
+  position: fixed !important;
+  top: 59px !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  padding: 14px 20px 90px !important; /* 90px = espacio para los botones flotantes */
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: radial-gradient(ellipse at 50% 40%, #2d6e3a 0%, #1e4d28 100%) !important;
+  overflow: hidden !important;
 }
 #table::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -160,9 +166,15 @@ h1 .hi { color: var(--gold); }
   gap: 8px; 
   z-index: 1; 
   width: 100%; 
-  padding-bottom: 40px; /* <--- ESTO libera el espacio del avatar */
+  /* Sin padding-bottom artificial */
 }
-.my-cards { display: flex; justify-content: center; position: relative; height: 114px; }
+
+.my-cards { 
+  display: flex; 
+  justify-content: center; 
+  position: relative; 
+  height: 114px; 
+}
 .my-card-wrap { position: relative; transition: transform .18s ease; margin: 0 -6px; }
 .my-card-wrap:hover { transform: translateY(-12px) scale(1.04); z-index: 10; }
 .my-card-wrap.playable { cursor: pointer; }
@@ -209,25 +221,28 @@ h1 .hi { color: var(--gold); }
 
 /* ══ ACTION PANEL ═══════════════════════ */
 #actionPanel {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
-  background: rgba(11,21,18,.94); backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border);
-  padding: 8px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 0;
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  border-top: none !important;
+  padding: 12px 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  z-index: 50 !important;
 }
 .offer-msg { text-align: center; font-size: 14px; font-weight: 600; color: var(--gold); padding: 2px 0; }
 .offer-msg.hidden { display: none !important; }
 .action-btns { display: flex; gap: 10px; justify-content: center; }
-.abtn {
-  font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 700;
-  border: 1px solid transparent; border-radius: 12px; padding: 13px 22px;
-  cursor: pointer; min-width: 110px;
-  transition: opacity .15s, transform .07s, filter .15s;
-}
+
 .abtn:active { transform: translateY(1px); }
 .abtn:disabled { opacity: .3; cursor: not-allowed; filter: grayscale(.4); transform: none; }
-.abtn-green { background: var(--green-glow); border-color: rgba(46,160,67,.45); color: #7ee787; }
-.abtn-gold  { background: var(--gold-glow);  border-color: rgba(232,171,42,.45); color: var(--gold); }
-.abtn-red   { background: var(--red-glow);   border-color: rgba(201,53,53,.45);  color: #ff8080; }
 .response-area { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .response-area.hidden { display: none !important; }
 .status-msg { text-align: center; font-size: 13px; color: var(--muted); min-height: 18px; }
@@ -416,7 +431,6 @@ h1 .hi { color: var(--gold); }
   #chatPanel { width: 200px; }
   .playing-card, .card-back { width: 64px; height: 96px; }
   .trick-slot { width: 68px; min-height: 100px; }
-  .abtn { font-size: 14px; padding: 11px 12px; min-width: 88px; }
   .overlay-card { padding: 28px 24px; }
   .waiting-code { font-size: 42px; }
 }
@@ -751,11 +765,6 @@ h1 .hi { color: var(--gold); }
   color: white;
   text-shadow: 0px 1px 4px rgba(0,0,0,0.8); /* Sombreado para que no se pierda con el fondo */
   white-space: nowrap;
-}
-
-/* ── REUBICACIÓN DE AVATARES (Esquinas Izquierdas) ── */
-#table {
-  position: relative !important;
 }
 
 /* ── REUBICACIÓN DE AVATARES (Posición final) ── */
@@ -1097,72 +1106,67 @@ h1 .hi { color: var(--gold); }
   display: block;
 }
 
-/* --- 2. BLOQUE EXCLUSIVO PARA MÓVILES --- */
-@media (max-width: 768px) {
-  /* 1. Forzamos al panel a que NO TENGA ALTURA PROPIA */
-  #actionPanel {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    
-    /* ESTO ES LO NUEVO: Altura mínima absoluta y quitamos el relleno */
-    height: auto !important; 
-    min-height: 0 !important; 
-    max-height: none !important;
-    
-    background: #1a1a1a !important;
-    padding: 2px 0 0 0 !important; /* Solo un poco arriba, NADA abajo */
-    margin: 0 !important;
-    z-index: 9999 !important;
-    
-    /* Alineación ultra-compacta */
-    display: flex;
-    flex-direction: column !important;
-    justify-content: flex-end !important; 
-  }
+/* ══ BOTONES DE ACCIÓN (base, todas las pantallas) ══════════════════════════ */
+.abtn {
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 13px 22px;
+  cursor: pointer;
+  min-width: 110px;
+  transition: opacity .15s, transform .07s, filter .15s;
+  text-shadow: 0 1px 3px rgba(0,0,0,.5);
+  box-shadow: 0 4px 16px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.4);
+}
 
-  /* 2. Los botones: Altura fija y pequeña (40px es el estándar de un dedo) */
+/* Colores sólidos por tipo de botón (PC y móvil) */
+.abtn-green { background: #1e7a34; border-color: #4caf65; color: #e8ffe8; }
+.abtn-gold  { background: #8a5e00; border-color: #e8ab2a; color: #fff3cc; }
+.abtn-red   { background: #7a1f1f; border-color: #e05555; color: #ffe8e8; }
+
+/* ══ AJUSTES EXCLUSIVOS PARA MÓVIL ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Contenedor de botones: fila compacta */
   #actionBtns {
     display: flex !important;
     flex-wrap: nowrap !important;
     gap: 4px !important;
     width: 100% !important;
-    height: 40px !important; /* Altura forzada del botón */
+    height: 40px !important;
     padding: 0 4px !important;
   }
 
+  /* Botones: tamaño reducido para pantalla pequeña */
   .abtn {
-    flex: 1 1 0 !important;
-    height: 40px !important; 
-    font-size: 14px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    flex: 1 1 0;
+    height: 40px;
+    font-size: 15px;
+    font-weight: 800;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  /* 3. El texto de estado: Lo hacemos "flotar" para que no empuje la barra */
+  /* Texto de estado y oferta: sin fondo, flota sobre la mesa */
   #statusMsg, #offerMsg {
     font-size: 11px !important;
     margin: 0 !important;
     padding: 2px 0 !important;
-    background: #1a1a1a !important; /* Mismo color que el fondo */
+    background: transparent !important;
     width: 100% !important;
   }
 
-  /* 4. Subir las cartas de forma agresiva */
-  #myZone {
-    /* Si la barra sigue tapando, sube este número a -100px o -120px */
-    transform: translateY(-90px) !important; 
-  }
-
-  /* Ocultar en el Lobby */
+  /* Ocultar panel de acciones en el lobby */
   #screenLobby #actionPanel, .hidden {
     display: none !important;
   }
 }
+
 /* Ocultar el panel de acciones cuando el juego no está activo */
 #screenGame.hidden ~ #actionPanel,
 #screenLobby:not(.hidden) ~ * #actionPanel {
@@ -1225,18 +1229,19 @@ h1 .hi { color: var(--gold); }
 .qj-buttons { display: flex; gap: 8px; }
 .btn-qj-confirm { background: gold; color: black; flex: 2; padding: 10px; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; }
 .btn-qj-cancel { background: #8b0000; color: white; flex: 1; padding: 10px; border-radius: 6px; border: none; cursor: pointer; }
+
+/* Los hijos vuelven a flujo normal (NO fixed) */
 .action-btns, .response-area {
-  position: fixed !important; /* La anclamos a la pantalla */
-  bottom: 0 !important;      /* Siempre al suelo */
-  left: 0;
-  width: 100%;
-  height: 70px;               /* Altura fija para que no crezca sola */
-  background: rgba(0, 0, 0, 0.9); /* Tu color de barra */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;               /* Por encima de todo */
-  padding-bottom: env(safe-area-inset-bottom); /* Respeto para iPhones */
+  position: static !important;
+  width: 100% !important;
+  height: auto !important;
+  background: transparent !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  padding: 0 !important;
+  flex-wrap: wrap !important;
 }
 
 .action-btn {
@@ -1326,16 +1331,21 @@ h1 .hi { color: var(--gold); }
   transform: scale(1.1);
 }
 
-/* El menú radial ahora no permite que nada se salga */
+/* Menú radial: oculto por defecto, visible al activar */
 .radial-menu {
-  position: absolute;
-  left: 30px; 
-  top: 50%;
-  z-index: 9999;
   visibility: hidden;
   pointer-events: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 9999;
 }
-
+.radial-menu.active {
+  visibility: visible;
+  pointer-events: auto;
+}
 /* --- BOCADILLO DE TEXTO (Speech Bubble) --- */
 .speech-bubble {
   position: absolute;

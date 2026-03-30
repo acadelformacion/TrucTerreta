@@ -1,5 +1,5 @@
 ⚔️ Ara sí que va de bo!
-🏅Hui no fas ni un punt.
+🏅 Hui no fas ni un punt.
 🌿 Açò és mel de romer.
 💣 Va, que esta cau.
 💰 Esta mà val or.
@@ -22,5 +22,7 @@
 🤥 Mal farol has soltat!
 🧐 Això no t'ho creus ni tu!
 🌙 Tira ja que es fa de nit!
-
+👎 Què tens? Un 4 o un 5?
+⚔️ Si tires la manilla, te la mate
+😉 No guinyes l'ull que no tens res!
 Menú configuración: sonido on/off, apariencia cartas, apariencia fondo, etc.
