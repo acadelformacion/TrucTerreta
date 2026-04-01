@@ -166,20 +166,54 @@ h1 .hi { color: var(--gold); }
   display: flex; 
   justify-content: center; 
   position: relative; 
-  height: 114px; 
+  height: 114px; /* Altura en móvil */
+  transition: height 0.3s ease;
 }
-.my-card-wrap { position: relative; transition: transform .18s ease; margin: 0 -6px; }
+
+/* Ajuste para PC (con el nuevo tamaño de 105px) */
+@media (min-width: 1024px) {
+  /* Bajamos de 195px a 165px para que la mano quede ajustada y elegante */
+  .my-cards { height: 165px; } 
+}
+.my-card-wrap { 
+  position: relative; 
+  transition: transform .18s ease; 
+  margin: 0 -8px; /* Móvil */
+}
+
+@media (min-width: 768px) {
+  .my-card-wrap { 
+    margin: 0 -15px; /* En PC las separamos un poco más para que luzcan */
+  }
+}
 .my-card-wrap:hover { transform: translateY(-12px) scale(1.04); z-index: 10; }
 .my-card-wrap.playable { cursor: pointer; }
 .my-card-wrap.playable:hover .playing-card { box-shadow: 0 18px 40px rgba(0,0,0,.8), 0 0 0 2px var(--gold); }
 
 /* ══ PLAYING CARDS ══════════════════════ */
 .playing-card {
-  width: 76px; height: 114px; border-radius: var(--r-card);
+  width: 86px;   /* Un pelín más grande en móvil */
+  height: 123px; 
+  border-radius: var(--r-card);
   background: linear-gradient(160deg, var(--card-light) 0%, var(--card-warm) 100%);
-  border: 1px solid rgba(0,0,0,.12); box-shadow: var(--sh-card);
-  padding: 6px; display: flex; flex-direction: column; justify-content: space-between;
-  user-select: none; color: #111;
+  border: 1px solid rgba(0,0,0,.12); 
+  box-shadow: var(--sh-card);
+  padding: 6px; 
+  display: flex; 
+  flex-direction: column; 
+  justify-content: space-between;
+  user-select: none; 
+  color: #111;
+  transition: width 0.3s ease, height 0.3s ease; /* Para que el cambio sea suave */
+}
+
+/* --- TAMAÑO PARA PC --- */
+@media (min-width: 768px) {
+  .playing-card {
+    width: 130px;  /* ¡Mucho más grande! */
+    height: 195px; 
+    padding: 10px; /* Más aire por dentro */
+  }
 }
 /* --- Card artwork images (Media/Images/Cards) --- */
 .playing-card.use-img{
@@ -273,7 +307,7 @@ h1 .hi { color: var(--gold); }
   right: 12px;     
   top: 180px;      /* <--- Aumentado de 165 a 180 para separarlo de Ronda */
   z-index: 40; 
-  width: 170px;    /* <--- Un poco más estrecho (antes 190) */
+  width: 160px;    /* <--- Un poco más estrecho (antes 190) */
   text-align: right; 
 }
 
@@ -342,7 +376,7 @@ h1 .hi { color: var(--gold); }
   display: flex; flex-direction: column; gap: 6px;
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
-.chat-msg { font-size: 12px; line-height: 1.4; }
+.chat-msg { font-size: 13px; line-height: 1.4; }
 .chat-msg .chat-author { font-weight: 700; margin-right: 4px; }
 .chat-msg.mine .chat-author { color: var(--gold); }
 .chat-msg.theirs .chat-author { color: #7ee787; }
@@ -948,13 +982,68 @@ h1 .hi { color: var(--gold); }
 }
 
 .trick-cell-rival, .trick-cell-mine {
-  width: 80px;  /* Ancho de la carta */
-  height: 114px; /* Alto de la carta */
+  /* Mantengo tus medidas y ajustes */
+  width: 82px;  
+  height: 123px; 
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
+
+  /* --- EFECTO 3D (LO NUEVO) --- */
+  /* El perspective crea la sensación de profundidad */
+  perspective: 500px; 
+}
+
+/* Aplicamos la inclinación a la carta que esté dentro de la celda */
+.trick-cell-rival img, .trick-cell-mine img,
+.trick-cell-rival .playing-card, .trick-cell-mine .playing-card {
+  /* rotateX(25deg) hace que la parte de arriba se aleje de ti */
+  /* scale(1.05) la agranda un pelín para compensar que al inclinarla parece más pequeña */
+  transform: rotateX(25deg) scale(1.05);
+  
+  /* Una sombra suave hacia abajo para que parezca que "flota" un milímetro sobre el tapete */
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+  
+  border-radius: 6px;
   transition: transform 0.3s ease;
+}
+
+/* --- TAMAÑO PARA PC (Equilibrado) --- */
+@media (min-width: 1024px) {
+  /* Bajamos de 130px a 105px para que no se dispare el tamaño */
+  .playing-card, .trick-cell-rival, .trick-cell-mine {
+    width: 105px;
+    height: 153px;
+  }
+}  
+  /* Contenedores de la mesa */
+.trick-cell-rival, .trick-cell-mine {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  /* El 'perspective' es clave para el 3D */
+  perspective: 600px; 
+}
+
+/* LA REGLA MAESTRA: Cualquier carta o imagen dentro de la mesa */
+.trick-cell-rival .playing-card, 
+.trick-cell-mine .playing-card,
+.trick-cell-rival img, 
+.trick-cell-mine img {
+  /* Forzamos la inclinación inmediatamente */
+  transform: rotateX(25deg) !important; 
+  
+  /* Sombra para que parezca apoyada */
+  box-shadow: 0 8px 15px rgba(0,0,0,0.4) !important;
+  
+  /* Aseguramos que ocupe todo el hueco */
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  
+  border-radius: 6px;
 }
 
 /* Separador invisible o línea sutil entre cartas */
@@ -971,9 +1060,6 @@ h1 .hi { color: var(--gold); }
   box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
   border-radius: 2px;
 }
-
-/* Ajuste para móviles: cartas un poco más pequeñas */
-/* --- Arreglo Definitivo: Panel inferior y Cartas en Móvil --- */
 
 /* --- 1. ARREGLO GLOBAL PARA AVATARES --- */
 /* (Esto hace que las fotos de los avatares se vean bien) */

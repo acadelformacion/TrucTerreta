@@ -171,11 +171,9 @@ export function applyHandEnd(state, reason, foldedSeat) {
   }
 
   // (Saltamos premios extra si alguien huye)
-  if (!isFold) {
-    for(const s of[0,1]){const pts=getSA(h,s);if(pts>0)addScore(state,s,pts);}
-    if(finish())return;
-  }
-
+  for(const s of[0,1]){const pts=getSA(h,s);if(pts>0)addScore(state,s,pts);}
+  if(finish())return;
+  
   // --- 2. RESOLVER TRUC Y LA MANO ---
   if(h.truc.state==='accepted'){
     const tw = isFold ? winnerSeat : handWinner(state);
