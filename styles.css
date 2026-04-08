@@ -55,9 +55,9 @@ body {
   content: "";
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background: url("./Media/Images/Others/fondo-pantalla-inicial.webp")
+    center/cover no-repeat;
+  filter: blur(5px) brightness(0.5);
   z-index: 0;
   pointer-events: none;
 }
@@ -878,10 +878,10 @@ h1 .hi {
   align-items: center;
   justify-content: center;
 }
-/* waitingOverlay: fondo-pantalla-inicial.webp con blur + panel sólido centrado */
+/* ── WAITING OVERLAY: mismo fondo pero como overlay ── */
 #waitingOverlay {
   background:
-    url("Media/Images/Others/fondo-pantalla-inicial.webp") center/cover
+    url("./Media/Images/Others/fondo-pantalla-inicial.webp") center/cover
       no-repeat,
     var(--bg);
 }
@@ -891,7 +891,6 @@ h1 .hi {
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   z-index: 0;
 }
 
@@ -1183,12 +1182,9 @@ h1 .hi {
   font-style: italic;
   padding-top: 4px;
 }
-/* ── LOBBY: Contenedor del fondo ── */
+/* ── LOBBY: fondo con blur ── */
 #screenLobby {
-  background:
-    url("Media/Images/Others/fondo-pantalla-inicial.webp") center/cover
-      no-repeat,
-    var(--bg);
+  background: var(--bg);
   overflow-y: auto;
 }
 
@@ -2439,23 +2435,42 @@ h1 .hi {
 }
 
 /* ── TABLE BACKGROUNDS ── */
-/* Fondo 2 — inserta aquí la ruta de tu imagen */
+/* ── MESA: Fondo 2 (Color Sòlid - Ja funciona) ── */
 #table.bg-bg2 {
   background: radial-gradient(
     ellipse at 50% 40%,
     #1a2a4a 0%,
     #0d1525 100%
-  ) !important; /* placeholder azul hasta que tengas imagen */
+  ) !important;
 }
+
+/* ── MESA: Fondo 3 (Imatge de BAR amb Blur - El que fallava) ── */
 #table.bg-bg3 {
-  background:
-    linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
-    url("Media/Images/Others/fondo-mesa-juego-bar.webp") center/cover no-repeat !important;
-
-  /* Esto ayuda a que el fondo no sea tan "chillón" */
-  backdrop-filter: grayscale(30%) brightness(70%);
+  position: relative;
+  overflow: hidden;
+  background-color: #000 !important; /* Fons negre mentre carrega */
 }
 
+#table.bg-bg3::before {
+  content: "";
+  position: absolute;
+  /* El inset -10px i el scale 1.1 són per a evitar vores blanques pel blur */
+  inset: -10px;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)),
+    url("./Media/Images/Others/fondo-mesa-juego-bar.webp") center/cover
+      no-repeat;
+  filter: blur(12px) saturate(0.85);
+  transform: scale(1.1);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Això fa que les cartes i el xat es vegen per sobre de la imatge borrosa */
+#table.bg-bg3 > * {
+  position: relative;
+  z-index: 1;
+}
 /* ── BUTTON SIZE: large mode ── */
 body.btn-large .abtn {
   font-size: 20px !important;
