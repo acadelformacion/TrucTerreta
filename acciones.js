@@ -463,6 +463,8 @@ export async function timeoutTurn() {
 
 export async function requestRematch() {
   if (!session.roomRef || session.mySeat === null) return;
+  const { resetHandIntroPlayed } = await import("./ui.js");
+  resetHandIntroPlayed();
   await mutate((state) => {
     if (!state.rematch) state.rematch = { [K(0)]: false, [K(1)]: false };
     state.rematch[K(session.mySeat)] = true;

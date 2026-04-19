@@ -228,9 +228,15 @@ let inactTimer = null,
 let prevTurnKey = "",
   prevEnvSt = "none",
   prevTrucSt = "none";
+/** Darrer `state.status` vist a renderAll (transició waiting→playing). */
+let _prevStatus = "";
+/** Primera aparició de les 3 cartes (reinicia en revenja via resetHandIntroPlayed). */
+let _introPlayed = false;
 let chatOpen = false,
   lastChatN = 0;
 let _lastState = null; // ultimo estado conocido para uso en helpers de render
+/** Darrer objecte `room` de Firebase (avatars, meta, …) per helpers fora de renderAll. */
+let _lastRoom = null;
 /** Esborrat automàtic de la sala (tancar pestanya/app) mentre està en preparació. */
 let _preGameRoomOnDisconnect = null;
 // Render tracking - avoid unnecessary DOM rebuilds that cause flash
@@ -496,6 +502,27 @@ function _showCountdownMsg(text) {
   void el.offsetWidth;
   el.classList.add("table-cd-anim");
 }
+
+async function startHandWithIntro(state) {
+  _actionInProgress = true;
+  $("waitingOverlay")?.classList.add("hidden");
+  try {
+    try {
+      await playVersusIntro(
+        pName(state, session.mySeat),
+        pName(state, other(session.mySeat)),
+      );
+    } catch (e) {
+      console.warn("playVersusIntro:", e);
+    }
+    if (session.mySeat === 0) {
+      await dealHand();
+    }
+  } finally {
+    _actionInProgress = false;
+  }
+}
+
 function startBetween(summaryHtml) {
   stopBetween();
   const ov = $("countdownOverlay"),
@@ -583,6 +610,75 @@ export function showTableMsg(text, isMine = true) {
       sender: session.mySeat,
     }).catch(() => {});
   }
+}
+
+/** Intro visual VS (GSAP). No s'invoca encara des del flux; retorna Promise al finalitzar. */
+export function playVersusIntro(myName, rivalName) {
+  const gsapLib = globalThis.gsap;
+  const overlay = $("versusOverlay");
+  const topBanner = $("vsBannerTop");
+  const bottomBanner = $("vsBannerBottom");
+  const vsText = $("vsText");
+  const elRival = $("vsNameRival");
+  const elMine = $("vsNameMine");
+  const imgRival = $("vsAvatarRival");
+  const imgMine = $("vsAvatarMine");
+  if (!gsapLib || !overlay || !topBanner || !bottomBanner || !vsText) {
+    return Promise.reject(
+      new Error("playVersusIntro: falta GSAP o elements del DOM"),
+    );
+  }
+  loadAvatarChoiceIntoMemory();
+  const mineSrc = srcFromChoice(myAvatarChoice) || AVATAR_IMAGES[0];
+  const rawRivalAv = _lastRoom?.avatars?.[K(other(session.mySeat))];
+  const rivalSrc = srcFromFirebaseAvatar(rawRivalAv) || AVATAR_IMAGES[0];
+  if (elRival) elRival.textContent = rivalName != null ? String(rivalName) : "";
+  if (elMine) elMine.textContent = myName != null ? String(myName) : "";
+  if (imgMine) {
+    imgMine.src = mineSrc;
+    imgMine.alt = myName != null ? String(myName) : "";
+  }
+  if (imgRival) {
+    imgRival.src = rivalSrc;
+    imgRival.alt = rivalName != null ? String(rivalName) : "";
+  }
+
+  overlay.classList.remove("hidden");
+  overlay.setAttribute("aria-hidden", "false");
+
+  return new Promise((resolve) => {
+    gsapLib.killTweensOf([overlay, topBanner, bottomBanner, vsText]);
+    gsapLib.set(overlay, { opacity: 1 });
+    gsapLib.set(topBanner, { yPercent: -100 });
+    gsapLib.set(bottomBanner, { yPercent: 100 });
+    gsapLib.set(vsText, {
+      xPercent: -50,
+      yPercent: -50,
+      scale: 2,
+      transformOrigin: "50% 50%",
+    });
+
+    const tl = gsapLib.timeline({
+      onComplete: () => {
+        overlay.classList.add("hidden");
+        overlay.setAttribute("aria-hidden", "true");
+        gsapLib.set(overlay, { clearProps: "opacity" });
+        gsapLib.set([topBanner, bottomBanner, vsText], {
+          clearProps: "transform",
+        });
+        resolve();
+      },
+    });
+
+    tl.to(topBanner, { yPercent: 0, duration: 0.55, ease: "power2.out" }, 0);
+    tl.to(bottomBanner, { yPercent: 0, duration: 0.55, ease: "power2.out" }, 0);
+    tl.to(vsText, { scale: 1, duration: 0.65, ease: "back.out(1.7)" }, ">");
+    tl.to(
+      overlay,
+      { opacity: 0, duration: 0.5, ease: "power2.inOut" },
+      "+=1.5",
+    );
+  });
 }
 
 function animatePlay(cardEl, card, onDone) {
@@ -738,10 +834,15 @@ function renderRivalCards(handObj) {
   }
 }
 
+export function resetHandIntroPlayed() {
+  _introPlayed = false;
+}
+
 function renderMyCards(state) {
   const h = state.hand,
     z = $("myCards");
   if (!z) return;
+  const emptyBefore = z.children.length === 0;
   if (!h) {
     z.replaceChildren();
     return;
@@ -797,6 +898,52 @@ function renderMyCards(state) {
     }
     z.appendChild(wrap);
   });
+
+  const gsap = globalThis.gsap;
+  if (
+    gsap &&
+    emptyBefore &&
+    myCards.length === 3 &&
+    !_introPlayed &&
+    z.querySelectorAll(".my-card-wrap").length === 3
+  ) {
+    _introPlayed = true;
+    const deckPile = $("deckPile");
+    const wraps = z.querySelectorAll(".my-card-wrap");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!deckPile || !globalThis.gsap) return;
+        const g = globalThis.gsap;
+        const deckRect = deckPile.getBoundingClientRect();
+        const gcx = deckRect.left + deckRect.width / 2;
+        const gcy = deckRect.top + deckRect.height / 2;
+        g.fromTo(
+          wraps,
+          {
+            x: (_i, el) => {
+              const r = el.getBoundingClientRect();
+              return gcx - (r.left + r.width / 2);
+            },
+            y: (_i, el) => {
+              const r = el.getBoundingClientRect();
+              return gcy - (r.top + r.height / 2);
+            },
+            rotation: () => Math.random() * 30 - 15,
+            transformOrigin: "50% 50%",
+          },
+          {
+            x: 0,
+            y: 0,
+            rotation: 0,
+            duration: 0.55,
+            ease: "power2.out",
+            stagger: 0.15,
+            clearProps: "transform",
+          },
+        );
+      });
+    });
+  }
 }
 function _renderTrickGrid(allTricks, curP0, curP1) {
   const grid = $("trickGrid");
@@ -1386,6 +1533,9 @@ function updatePreGameRoomOnDisconnectArm(state) {
 // --- MAIN RENDER --------------------------------------------------------------
 function renderAll(room) {
   const state = room?.state || defaultState();
+  if (_prevStatus === "waiting" && state.status === "playing") {
+    _introPlayed = false;
+  }
   session.roomVisibility =
     room?.meta?.visibility === "private"
       ? "private"
@@ -1405,7 +1555,20 @@ function renderAll(room) {
   resetInactivity();
   detectSounds(state);
   _lastState = state;
+  _lastRoom = room ?? null;
   updatePreGameRoomOnDisconnectArm(state);
+  $("deckPile")?.classList.toggle("hidden", state.status !== "playing");
+  const deck = $("deckPile");
+  if (deck) {
+    if (state.status === "playing") {
+      const iAmMano = state.mano === session.mySeat;
+      deck.style.left = iAmMano ? "16px" : "";
+      deck.style.right = iAmMano ? "" : "16px";
+    } else {
+      deck.style.left = "";
+      deck.style.right = "";
+    }
+  }
   if (state.status === "playing" && state.hand) {
     _betweenCountdownLatch = false;
     $("tableCdEl")?.classList.add("hidden");
@@ -1589,6 +1752,7 @@ function renderAll(room) {
       if (bothJoined && betweenTimer === null && !_betweenCountdownLatch)
         startBetween(buildScoreSummary(state));
     }
+    _prevStatus = state.status;
     return;
   }
   $("waitingOverlay").classList.add("hidden");
@@ -1608,6 +1772,7 @@ function renderAll(room) {
       prevTurnKey = tk;
     }
   }
+  _prevStatus = state.status;
 }
 
 // --- Confetti -----------------------------------------------------------------
@@ -2512,7 +2677,7 @@ const FRASES = [
   "😲 No me l'esperava.",
   "🏟️ Ací encara hi ha partida.",
   "🧱 Has vingut a fer bulto.",
-  "👵 Ma iaia haguera jugat millor!",
+  "👵 Ma huela haguera jugat millor!",
   "🙊 No tens res i ho saps.",
   "🐔 Tens por o què?",
   "🍀 Xe, quina potra que tens!",
@@ -2957,9 +3122,19 @@ export function initApp() {
   $("hostReadyBtn")?.addEventListener("click", onPlayerReadyClick);
 
   $("startBtn").addEventListener("click", async () => {
+    if (_actionInProgress) return;
     sndBtn();
-    $("waitingOverlay").classList.add("hidden");
-    await dealHand();
+    let state = _lastState;
+    if (!state && session.roomRef) {
+      try {
+        const snap = await get(session.roomRef);
+        state = snap.val()?.state ?? defaultState();
+      } catch {
+        state = defaultState();
+      }
+    }
+    if (!state) state = defaultState();
+    await startHandWithIntro(state);
   });
 
   // --- NUEVO: Configuración -------------------------------------------------

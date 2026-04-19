@@ -6,7 +6,6 @@
   <title>El Truc de la Terreta</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script type="module" src="game.js"></script>
 </head>
 <body>
 
@@ -147,6 +146,11 @@ PANTALLA 2 · MESA DE JUEGO
   </div>
 
   <div id="table">
+    <div id="deckPile" class="hidden" aria-hidden="true">
+      <div class="card-back"></div>
+      <div class="card-back"></div>
+      <div class="card-back"></div>
+    </div>
     <div id="rivalZone">
       <div class="rival-header">
         <div class="player-avatar-wrap" id="rivalAvatarContainer">
@@ -458,5 +462,24 @@ PANTALLA 2 · MESA DE JUEGO
 <div id="myPhraseMenu" class="phrase-menu hidden" aria-hidden="true"></div>
 <div id="myBubble" class="speech-bubble hidden" aria-hidden="true"></div>
 <div id="rivalBubble" class="speech-bubble rival-bubble hidden" aria-hidden="true"></div>
+
+<div id="versusOverlay" class="versus-overlay hidden" aria-hidden="true">
+  <div id="vsBannerTop" class="versus-banner versus-banner--top">
+    <div class="versus-banner-inner">
+      <img id="vsAvatarRival" class="versus-av" src="" alt="" width="80" height="80" decoding="async" />
+      <span id="vsNameRival" class="versus-name"></span>
+    </div>
+  </div>
+  <div id="vsBannerBottom" class="versus-banner versus-banner--bottom">
+    <div class="versus-banner-inner">
+      <img id="vsAvatarMine" class="versus-av" src="" alt="" width="80" height="80" decoding="async" />
+      <span id="vsNameMine" class="versus-name"></span>
+    </div>
+  </div>
+  <div id="vsText" class="versus-vs">VS</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+<script type="module" src="game.js"></script>
 </body>
 </html>

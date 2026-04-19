@@ -19,6 +19,7 @@
   --red: #c93535;
   --red-glow: rgba(201, 53, 53, 0.22);
   --text: #f0e4e4;
+  --felt: #1e4d28;
   --muted: #e8f9e9;
   --dim: #3a4f3c;
   --card-light: #fffef8;
@@ -973,6 +974,45 @@ body {
   gap: 10px;
   z-index: 1;
 }
+
+/* Mazo visual (lateral de la taula; left/right des de ui.js segons mano) */
+#deckPile {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 75px;
+  z-index: 5;
+  pointer-events: none;
+}
+#deckPile .card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+#deckPile .card-back:nth-child(1) {
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+#deckPile .card-back:nth-child(2) {
+  top: 2px;
+  left: 2px;
+  z-index: 2;
+}
+#deckPile .card-back:nth-child(3) {
+  top: 4px;
+  left: 4px;
+  z-index: 3;
+}
+@media (min-width: 768px) {
+  #deckPile {
+    width: 72px;
+    height: 104px;
+  }
+}
 .center-info {
   font-size: 12px;
   font-weight: 600;
@@ -1433,6 +1473,97 @@ body {
 
 .overlay.hidden {
   display: none !important;
+}
+
+/* Versus intro (GSAP) */
+#versusOverlay.versus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  overflow: hidden;
+  background: rgba(11, 21, 18, 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+#versusOverlay.versus-overlay.hidden {
+  display: none !important;
+  pointer-events: none;
+}
+#vsBannerTop,
+#vsBannerBottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 50vh;
+  min-height: 42%;
+  max-height: 52vh;
+  padding: clamp(12px, 3vh, 28px) clamp(16px, 4vw, 32px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  border-color: rgba(232, 171, 42, 0.35);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--felt) 72%, transparent),
+    rgba(11, 21, 18, 0.82) 50%,
+    color-mix(in srgb, var(--felt) 72%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px rgba(232, 171, 42, 0.2);
+  will-change: transform;
+}
+.versus-banner-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 3vw, 24px);
+  flex-wrap: wrap;
+  max-width: min(96vw, 720px);
+}
+#versusOverlay .versus-av {
+  width: 80px;
+  height: 80px;
+  min-width: 80px;
+  min-height: 80px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid rgba(232, 171, 42, 0.45);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+#versusOverlay .versus-name {
+  font-size: max(2.5rem, clamp(2.5rem, 7vw, 4rem));
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+}
+#vsBannerTop {
+  top: 0;
+  border-bottom: 1px solid rgba(232, 171, 42, 0.35);
+}
+#vsBannerBottom {
+  bottom: 0;
+  border-top: 1px solid rgba(232, 171, 42, 0.35);
+}
+#vsText {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  font-weight: 900;
+  font-size: clamp(3rem, 14vw, 5.5rem);
+  line-height: 1;
+  color: var(--gold);
+  text-shadow:
+    0 0 28px var(--gold-glow),
+    0 2px 0 rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  will-change: transform;
 }
 
 /* Entre mans: resum a baix; compte enrere al centre (tableCdEl) */
