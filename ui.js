@@ -117,13 +117,41 @@ function roomListEstadoLabel(st) {
   if (!st) return "En preparació";
   const s0 = real(st.scores?.[K(0)] ?? OFFSET);
   const s1 = real(st.scores?.[K(1)] ?? OFFSET);
-  if (st.status === "game_over" || s0 >= 12 || s1 >= 12) return "Finalitzada";
+  const meta = Logica.getPuntosParaGanar(st);
+  if (st.status === "game_over" || s0 >= meta || s1 >= meta) return "Finalitzada";
   if (st.status === "waiting" && real(st.handNumber ?? OFFSET) === 0)
     return "En preparació";
   return "En partida";
 }
 
+/** Configuració de sala llegida de Firebase (arrel `settings` o còpia a `state.settings`). */
+function mergeRoomSettings(room) {
+  const s = room?.settings || room?.state?.settings || {};
+  const pts = Number(s.puntosParaGanar);
+  const modo = s.modoJuego === "2v2" ? "2v2" : "1v1";
+  let maxJ = Number(s.maxJugadores);
+  if (!Number.isFinite(maxJ) || maxJ < 2) maxJ = modo === "2v2" ? 4 : 2;
+  return {
+    puntosParaGanar: pts === 24 ? 24 : 12,
+    modoJuego: modo,
+    maxJugadores: maxJ,
+  };
+}
+
+const DEFAULT_ROOM_SETTINGS = () => ({
+  puntosParaGanar: 12,
+  modoJuego: "1v1",
+  maxJugadores: 2,
+});
+
+/** Icones mini per a etiquetes de sala (pedra / jugador). */
+const ICO_STONE =
+  '<svg class="rl-svg" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><ellipse cx="12" cy="14" rx="7" ry="5.5" fill="currentColor" opacity=".88"/></svg>';
+const ICO_USER =
+  '<svg class="rl-svg" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/></svg>';
+
 let _pendingCreateVisibility = "public";
+let _pendingRoomSettings = DEFAULT_ROOM_SETTINGS();
 const INACT_MS = 60 * 60 * 1000;
 const TURN_SECS = 30;
 const OFFSET = 10; // scores/trickWins stored +10
@@ -1915,11 +1943,13 @@ async function createRoom() {
     } else {
       _pendingCreateVisibility = "public";
       setLobbyMsg("Sala ja existeix.", "err");
-      return;
+      return false;
     }
   }
+  const settings = { ..._pendingRoomSettings };
   const init = defaultState();
   init.roomCode = code;
+  init.settings = { ...settings };
   init.players[K(0)] = {
     name,
     clientId: uid(),
@@ -1928,6 +1958,7 @@ async function createRoom() {
   init.logs = [{ text: `Sala creada per ${name}.`, at: Date.now() }];
   await set(r, {
     meta: { createdAt: Date.now(), roomCode: code, visibility: vis },
+    settings,
     state: init,
     lastActivity: Date.now(),
   });
@@ -1938,6 +1969,7 @@ async function createRoom() {
   setLobbyMsg(`Sala ${code} creada.`, "good");
   _pendingCreateVisibility = "public";
   startSession(code);
+  return true;
 }
 
 async function joinRoom() {
@@ -1957,7 +1989,11 @@ async function joinRoom() {
       if (!st.players) st.players = { [K(0)]: null, [K(1)]: null };
       const p0 = st.players[K(0)],
         p1 = st.players[K(1)];
-      if (p0 && p1) return undefined;
+      const roomSettings = mergeRoomSettings(cur);
+      if (!st.settings) st.settings = { ...roomSettings };
+      const maxJ = Math.min(roomSettings.maxJugadores, 2);
+      const ocupats = (p0 ? 1 : 0) + (p1 ? 1 : 0);
+      if (ocupats >= maxJ) return undefined;
       const extra = authPlayerExtras();
       if (!p0) {
         st.players[K(0)] = { name, clientId: uid(), ...extra };
@@ -2079,11 +2115,16 @@ function loadRoomList() {
           const inactive = Date.now() - (room.lastActivity || 0) > 3600000;
           if (inactive) continue;
         }
+        const conf = mergeRoomSettings(room);
+        const maxCap = Math.min(conf.maxJugadores, 2);
         open.push({
           code,
           host: p0.name,
           hostPhoto: lobbyPhotoForPlayer(p0),
           nPlayers,
+          maxCap,
+          puntosParaGanar: conf.puntosParaGanar,
+          modoJuego: conf.modoJuego,
           estado: roomListEstadoLabel(st),
         });
       }
@@ -2092,7 +2133,7 @@ function loadRoomList() {
     const newKey = open
       .map(
         (r) =>
-          `${r.code}|${r.host}|${r.hostPhoto}|${r.nPlayers}|${r.estado}`,
+          `${r.code}|${r.host}|${r.hostPhoto}|${r.nPlayers}|${r.maxCap}|${r.puntosParaGanar}|${r.modoJuego}|${r.estado}`,
       )
       .join(";");
     if (newKey === _lastRoomListKey) return;
@@ -2118,27 +2159,37 @@ function loadRoomList() {
       left.appendChild(img);
       const body = document.createElement("div");
       body.className = "rl-card-body";
-      const cr = document.createElement("div");
-      cr.className = "rl-creator-line";
-      cr.append("Creador: ");
+      const headLn = document.createElement("div");
+      headLn.className = "rl-room-head";
+      headLn.append("Sala de ");
       const nick = document.createElement("strong");
       nick.className = "rl-creator-nick";
       nick.textContent = r.host;
-      cr.appendChild(nick);
+      headLn.appendChild(nick);
+      headLn.append(" · ");
+      const tagPts = document.createElement("span");
+      tagPts.className = "rl-tag";
+      tagPts.innerHTML = `${ICO_STONE}<span>${r.puntosParaGanar}p</span>`;
+      const tagMod = document.createElement("span");
+      tagMod.className = "rl-tag";
+      tagMod.innerHTML = `${ICO_USER}<span>${r.modoJuego}</span>`;
+      headLn.appendChild(tagPts);
+      headLn.appendChild(document.createTextNode(" "));
+      headLn.appendChild(tagMod);
       const jg = document.createElement("div");
       jg.className = "rl-meta-line";
-      jg.textContent = `Jugadors: ${r.nPlayers}/2`;
+      jg.textContent = `Jugadors: ${r.nPlayers}/${r.maxCap}`;
       const stEl = document.createElement("div");
       stEl.className = "rl-meta-line rl-estado";
       stEl.textContent = r.estado;
-      body.appendChild(cr);
+      body.appendChild(headLn);
       body.appendChild(jg);
       body.appendChild(stEl);
       const join = document.createElement("button");
       join.type = "button";
       join.className = "lbtn lbtn-primary rl-join";
       join.textContent = "Entrar";
-      const ple = r.nPlayers >= 2;
+      const ple = r.nPlayers >= r.maxCap;
       if (ple) join.classList.add("rl-join-disabled");
       join.style.opacity = ple ? "0.55" : "1";
       join.style.cursor = ple ? "not-allowed" : "pointer";
@@ -2367,15 +2418,66 @@ function initLegalModal() {
   });
 }
 
+let _openCreateRoomModal = () => {};
+
+function initCreateRoomModal() {
+  const modal = $("createRoomModal");
+  const backdrop = $("createRoomModalBackdrop");
+  const cancel = $("createRoomModalCancel");
+  const submit = $("createRoomModalSubmit");
+  if (!modal || !backdrop || !cancel || !submit) return;
+
+  const hide = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+
+  const resetForm = () => {
+    _pendingRoomSettings = DEFAULT_ROOM_SETTINGS();
+    const r12 = modal.querySelector('input[name="crcPts"][value="12"]');
+    const m11 = modal.querySelector('input[name="crcModo"][value="1v1"]');
+    if (r12) r12.checked = true;
+    if (m11) m11.checked = true;
+  };
+
+  _openCreateRoomModal = () => {
+    resetForm();
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    submit.focus();
+  };
+
+  cancel.addEventListener("click", hide);
+  backdrop.addEventListener("click", hide);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) hide();
+  });
+
+  submit.addEventListener("click", async () => {
+    const ptsRaw = modal.querySelector('input[name="crcPts"]:checked')?.value;
+    const modo =
+      modal.querySelector('input[name="crcModo"]:checked')?.value || "1v1";
+    const pts = Number(ptsRaw) === 24 ? 24 : 12;
+    _pendingRoomSettings = {
+      puntosParaGanar: pts,
+      modoJuego: modo,
+      maxJugadores: modo === "2v2" ? 4 : 2,
+    };
+    const ok = await createRoom();
+    if (ok) hide();
+  });
+}
+
 export function initApp() {
   configureActions({ renderAll });
   initAuthFlow();
   initLegalModal();
+  initCreateRoomModal();
   limpiarSalasAntiguas(); // sin await, que corra en segundo plano
   $("btn-crear-publica")?.addEventListener("click", () => {
     _pendingCreateVisibility = "public";
     if ($("roomInput")) $("roomInput").value = "";
-    createRoom();
+    _openCreateRoomModal();
   });
   $("btn-crear-privada")?.addEventListener("click", () => {
     _pendingCreateVisibility = "private";
@@ -2394,7 +2496,7 @@ export function initApp() {
       return;
     }
     if ($("roomInput")) $("roomInput").value = code;
-    createRoom();
+    _openCreateRoomModal();
   });
   $("btn-unirse-codigo")?.addEventListener("click", () => {
     const raw = window.prompt("Introdueix el codi de la sala:", "");

@@ -38,6 +38,17 @@ const other = (s) => (s === 0 ? 1 : 0);
 function getScore(st, seat) {
   return real(st?.scores?.[K(seat)]);
 }
+
+/** Pedres per guanyar la partida (12 o 24), per defecte 12 si falta configuració. */
+export function getPuntosParaGanar(state) {
+  const n = Number(state?.settings?.puntosParaGanar);
+  return n === 24 ? 24 : 12;
+}
+
+function puntosFalta(state) {
+  const lim = getPuntosParaGanar(state);
+  return lim - Math.max(getScore(state, 0), getScore(state, 1));
+}
 function addScore(st, seat, pts) {
   if (!st.scores) st.scores = { [K(0)]: OFFSET, [K(1)]: OFFSET };
   st.scores[K(seat)] = Number(st.scores[K(seat)] || OFFSET) + pts;
@@ -217,7 +228,8 @@ export function applyHandEnd(state, reason, foldedSeat) {
   const finish = () => {
     const s0 = getScore(state, 0),
       s1 = getScore(state, 1);
-    if (s0 >= 12 || s1 >= 12) {
+    const meta = getPuntosParaGanar(state);
+    if (s0 >= meta || s1 >= meta) {
       state.status = "game_over";
       state.winner = s0 > s1 ? 0 : s1 > s0 ? 1 : state.mano;
       state.hand = null;
@@ -239,10 +251,9 @@ export function applyHandEnd(state, reason, foldedSeat) {
       const v1 = bestEnvit(fromHObj(h.hands?.[K(1)]));
       ew = v0 > v1 ? 0 : v1 > v0 ? 1 : state.mano;
     }
-    // Tu lógica de puntos para la Falta (12 - máxima puntuación) está perfecta
     const ep =
       h.envit.acceptedLevel === "falta"
-        ? 12 - Math.max(getScore(state, 0), getScore(state, 1))
+        ? puntosFalta(state)
         : Number(h.envit.acceptedLevel || 0);
     const ewName = state.players?.[K(ew)]?.name || `J${ew}`;
     addScore(state, ew, ep);

@@ -355,6 +355,78 @@ PANTALLA 2 · MESA DE JUEGO
 
 </div><!-- /screenGame -->
 
+<!-- Modal: configuració nova sala -->
+<div
+  id="createRoomModal"
+  class="create-room-modal hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="createRoomModalTitle"
+  aria-hidden="true"
+>
+  <div class="create-room-backdrop" id="createRoomModalBackdrop"></div>
+  <div class="create-room-panel">
+    <div class="create-room-head">
+      <h2 id="createRoomModalTitle" class="create-room-title">Nova sala</h2>
+      <p class="create-room-sub">Trieu el tipus de partida abans de crear la sala.</p>
+    </div>
+    <div class="crc-grid">
+      <div class="crc-col">
+        <div class="crc-col-head">
+          <span class="crc-col-ico crc-ico-stone" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22"><ellipse cx="12" cy="14" rx="7" ry="5.5" fill="currentColor" opacity=".9"/></svg>
+          </span>
+          <span>Partida a</span>
+        </div>
+        <label class="crc-opt">
+          <input type="radio" name="crcPts" value="12" checked />
+          <span class="crc-opt-card">
+            <span class="crc-opt-title">12 pedres</span>
+            <span class="crc-opt-hint">Partida clàssica</span>
+          </span>
+        </label>
+        <label class="crc-opt">
+          <input type="radio" name="crcPts" value="24" />
+          <span class="crc-opt-card">
+            <span class="crc-opt-title">24 pedres</span>
+            <span class="crc-opt-hint">Partida llarga</span>
+          </span>
+        </label>
+      </div>
+      <div class="crc-col">
+        <div class="crc-col-head">
+          <span class="crc-col-ico crc-ico-user" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/></svg>
+          </span>
+          <span>Jugadors</span>
+        </div>
+        <label class="crc-opt">
+          <input type="radio" name="crcModo" value="1v1" checked />
+          <span class="crc-opt-card">
+            <span class="crc-opt-title">1 vs 1</span>
+            <span class="crc-opt-hint">Dos jugadors</span>
+          </span>
+        </label>
+        <label class="crc-opt crc-opt-disabled">
+          <input type="radio" name="crcModo" value="2v2" disabled />
+          <span class="crc-opt-card">
+            <span class="crc-opt-title">2 vs 2</span>
+            <span class="crc-opt-hint">Pròximament</span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="create-room-actions">
+      <button type="button" class="create-room-btn-secondary" id="createRoomModalCancel">
+        Cancel·lar
+      </button>
+      <button type="button" class="lbtn lbtn-primary create-room-btn-primary" id="createRoomModalSubmit">
+        Crear sala
+      </button>
+    </div>
+  </div>
+</div>
+
 <div
   id="legalModal"
   class="legal-modal hidden"

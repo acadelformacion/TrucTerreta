@@ -61,7 +61,7 @@ function cardLabel(c) {
 
 export function defaultState() {
   return {
-    version: 7,
+    version: 8,
     status: "waiting",
     roomCode: "",
     players: { [K(0)]: null, [K(1)]: null },
@@ -74,6 +74,11 @@ export function defaultState() {
     logs: [],
     winner: null,
     gameEndReason: null,
+    settings: {
+      puntosParaGanar: 12,
+      modoJuego: "1v1",
+      maxJugadores: 2,
+    },
   };
 }
 

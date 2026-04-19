@@ -307,6 +307,172 @@ body {
   outline-offset: 2px;
 }
 
+/* Modal nova sala (configuració) */
+.create-room-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 5100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+}
+.create-room-modal.hidden {
+  display: none !important;
+}
+.create-room-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+}
+.create-room-panel {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  max-height: min(90vh, 640px);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(
+    165deg,
+    rgba(18, 36, 28, 0.98),
+    rgba(8, 18, 14, 0.99)
+  );
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.6);
+  padding: 20px 20px 18px;
+  overflow: auto;
+}
+.create-room-head {
+  text-align: center;
+  margin-bottom: 16px;
+}
+.create-room-title {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: -0.02em;
+}
+.create-room-sub {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.35;
+}
+.crc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+  margin-bottom: 18px;
+}
+@media (max-width: 520px) {
+  .crc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.crc-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.crc-col-ico {
+  display: flex;
+  color: rgba(212, 175, 55, 0.95);
+}
+.crc-opt {
+  display: block;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.crc-opt:last-child {
+  margin-bottom: 0;
+}
+.crc-opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.crc-opt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.crc-opt:hover .crc-opt-card {
+  border-color: rgba(212, 175, 55, 0.35);
+}
+.crc-opt input:focus-visible + .crc-opt-card {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.crc-opt input:checked + .crc-opt-card {
+  border-color: rgba(212, 175, 55, 0.65);
+  background: rgba(212, 175, 55, 0.1);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.2);
+}
+.crc-opt-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+}
+.crc-opt-hint {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.48);
+}
+.crc-opt-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.crc-opt-disabled .crc-opt-card {
+  pointer-events: none;
+}
+.create-room-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.create-room-btn-secondary {
+  min-width: 120px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.create-room-btn-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.create-room-btn-primary {
+  flex: 1 1 180px;
+  max-width: 260px;
+  padding: 12px 20px !important;
+  font-size: 15px !important;
+}
+
 .auth-actions {
   display: flex;
   flex-direction: column;
@@ -2334,6 +2500,32 @@ body {
 .rl-creator-nick {
   font-weight: 700;
   color: #fff;
+}
+.rl-room-head {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.45;
+  word-break: break-word;
+}
+.rl-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(212, 175, 55, 0.14);
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  vertical-align: middle;
+}
+.rl-tag .rl-svg {
+  flex-shrink: 0;
+  opacity: 0.9;
+  color: rgba(212, 175, 55, 0.95);
 }
 .rl-meta-line {
   font-size: 11px;
