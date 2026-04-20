@@ -1171,7 +1171,7 @@ function renderActions(state) {
               if (snap?.val()) renderAll(snap.val());
             })
             .catch(() => {});
-        }, 1500);
+        }, 600);
       }
     });
     ra.appendChild(b);
@@ -3213,7 +3213,7 @@ export function initApp() {
             if (snap?.val()) renderAll(snap.val());
           })
           .catch(() => {});
-      }, 1500);
+      }, 600);
     }
   };
   $("faltaBtn").onclick = async () => {
@@ -3231,7 +3231,7 @@ export function initApp() {
             if (snap?.val()) renderAll(snap.val());
           })
           .catch(() => {});
-      }, 1500);
+      }, 600);
     }
   };
   $("trucBtn").onclick = async () => {
@@ -3249,7 +3249,7 @@ export function initApp() {
             if (snap?.val()) renderAll(snap.val());
           })
           .catch(() => {});
-      }, 1500);
+      }, 600);
     }
   };
   $("mazoBtn").onclick = async () => {
@@ -3267,7 +3267,7 @@ export function initApp() {
             if (snap?.val()) renderAll(snap.val());
           })
           .catch(() => {});
-      }, 1500);
+      }, 600);
     }
   };
 

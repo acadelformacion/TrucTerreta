@@ -181,7 +181,7 @@ export async function playCard(card) {
           })
           .catch(() => {});
       }
-    }, 380);
+    }, 90);
   }
 }
 
