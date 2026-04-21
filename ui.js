@@ -237,6 +237,11 @@ let chatOpen = false,
 let _lastState = null; // ultimo estado conocido para uso en helpers de render
 /** Darrer objecte `room` de Firebase (avatars, meta, …) per helpers fora de renderAll. */
 let _lastRoom = null;
+const _bubbleState = {
+  myBubble: { offerText: "", phraseText: "", phraseTimer: null },
+  rivalBubble: { offerText: "", phraseText: "", phraseTimer: null },
+};
+let _versusIntroShownKey = "";
 /** Esborrat automàtic de la sala (tancar pestanya/app) mentre està en preparació. */
 let _preGameRoomOnDisconnect = null;
 // Render tracking - avoid unnecessary DOM rebuilds that cause flash
@@ -507,14 +512,6 @@ async function startHandWithIntro(state) {
   _actionInProgress = true;
   $("waitingOverlay")?.classList.add("hidden");
   try {
-    try {
-      await playVersusIntro(
-        pName(state, session.mySeat),
-        pName(state, other(session.mySeat)),
-      );
-    } catch (e) {
-      console.warn("playVersusIntro:", e);
-    }
     if (session.mySeat === 0) {
       await dealHand();
     }
@@ -767,7 +764,7 @@ function buildScoreSummary(state) {
       label = `Envit guanyat per <b>${winner}</b>`;
     } else if (txt.includes("Envit") && txt.includes("rebutjat")) {
       winner = guessWinner();
-      label = `No vull l'envit - +1 per <b>${winner}</b>`;
+      label = `No vull l'envit - +${pts} per <b>${winner}</b>`;
     } else if (
       (txt.includes("Truc") ||
         txt.includes("truc") ||
@@ -1046,7 +1043,21 @@ function renderTrick(state) {
   const allT = h.allTricks || [];
   const p0 = getPlayed(h, 0),
     p1 = getPlayed(h, 1);
-  const trickKey = allT.length + "|" + (p0 || "-") + "|" + (p1 || "-");
+  const offerTag = h.pendingOffer
+    ? `${h.pendingOffer.kind}:${h.pendingOffer.level}`
+    : "";
+  const trickKey =
+    real(state.handNumber || OFFSET) +
+    "|" +
+    allT.length +
+    "|" +
+    (p0 || "-") +
+    "|" +
+    (p1 || "-") +
+    "|" +
+    h.mode +
+    "|" +
+    offerTag;
 
   if (trickKey !== _prevTrickKey) {
     _prevTrickKey = trickKey;
@@ -1391,7 +1402,6 @@ function renderHUD(state) {
   $("hudRoom").textContent = hideCode
     ? "Sala pública"
     : `Sala ${session.roomCode || "-"}`;
-  $("hudSeat").textContent = pName(state, session.mySeat);
 
   const sMy = getScore(state, session.mySeat);
   const sRiv = getScore(state, other(session.mySeat));
@@ -1399,13 +1409,6 @@ function renderHUD(state) {
   // Ahora siempre llamamos a la animación, ella sola decide si tiene que saltar o no
   animateHUDPoints("hudScore0", sMy, 0);
   animateHUDPoints("hudScore1", sRiv, 1);
-
-  $("hudState").textContent =
-    state.status === "waiting"
-      ? "Esperant"
-      : state.status === "playing"
-        ? "En joc"
-        : "Acabada";
 
   const turnPlayer = state.hand
     ? pName(state, state.hand.turn)
@@ -1615,6 +1618,7 @@ function renderAll(room) {
     }
   }
   renderAvatars(room);
+  syncOfferBubblesFromState(state);
   if (state.status === "waiting" && real(state.handNumber || OFFSET) === 0) {
     renderWaitingSlots(room, state);
   }
@@ -1629,6 +1633,22 @@ function renderAll(room) {
   renderHUD(state);
   $("myName").textContent = pName(state, session.mySeat);
   $("rivalName").textContent = pName(state, other(session.mySeat));
+  const firstHandStartedForAll =
+    _prevStatus === "waiting" &&
+    state.status === "playing" &&
+    real(state.handNumber || OFFSET) === 0;
+  if (firstHandStartedForAll) {
+    const introKey = `${session.roomCode || ""}|${state.handNumber || OFFSET}|${session.mySeat}`;
+    if (_versusIntroShownKey !== introKey) {
+      _versusIntroShownKey = introKey;
+      playVersusIntro(
+        pName(state, session.mySeat),
+        pName(state, other(session.mySeat)),
+      ).catch((e) => {
+        console.warn("playVersusIntro:", e);
+      });
+    }
+  }
   // Sync avatar selection UI (data-av: google | guest | 0..7)
   document.querySelectorAll(".av-opt").forEach((el) => {
     const d = el.dataset.av;
@@ -1645,7 +1665,7 @@ function renderAll(room) {
   renderRivalCards(state.hand?.hands?.[K(other(session.mySeat))]);
   updateRivalTimer(state);
   renderMyCards(state);
-  // Save snapshot whenever hand is active
+  // Snapshot de bazas: amb mà activa ve de `hand`; sense mà, de `lastAllTricks` (p. ex. última basa resolta)
   if (state.hand) {
     _lastCompletedTricks = {
       allTricks: state.hand.allTricks || [],
@@ -1654,13 +1674,10 @@ function renderAll(room) {
         "-" +
         Logica.getTrickIndex(state.hand),
     };
-  }
-  // Use state.lastAllTricks (includes the final trick even after hand=null)
-  if (state.lastAllTricks && state.lastAllTricks.length > 0) {
+  } else if (state.lastAllTricks && state.lastAllTricks.length > 0) {
     const lk = "lat-" + state.lastAllTricks.length + "-" + state.handNumber;
     if (_lastCompletedTricks?.key !== lk) {
       _lastCompletedTricks = { allTricks: state.lastAllTricks, key: lk };
-      _prevTrickKey = "";
     }
   }
   // Show snapshot when hand is null (between hands or game_over)
@@ -2795,6 +2812,38 @@ function positionSpeechBubble(bubbleId) {
   }
 }
 
+function offerTextFromPendingOffer(offer) {
+  if (!offer) return "";
+  if (offer.kind === "envit") {
+    if (offer.level === "falta") return "Falta";
+    if (Number(offer.level) >= 4) return "Torne";
+    return "Envidar";
+  }
+  if (offer.kind === "truc") {
+    if (Number(offer.level) === 4) return "Val 4";
+    if (Number(offer.level) === 3) return "Retruque";
+    return "Truc";
+  }
+  return "";
+}
+
+function syncOfferBubblesFromState(state) {
+  const pending = state?.hand?.pendingOffer || null;
+  _bubbleState.myBubble.offerText = "";
+  _bubbleState.rivalBubble.offerText = "";
+  if (!pending || (session.mySeat !== 0 && session.mySeat !== 1)) {
+    renderSpeechBubble("myBubble");
+    renderSpeechBubble("rivalBubble");
+    return;
+  }
+  const txt = offerTextFromPendingOffer(pending);
+  const mine = pending.by === session.mySeat;
+  const targetId = mine ? "myBubble" : "rivalBubble";
+  _bubbleState[targetId].offerText = txt;
+  renderSpeechBubble("myBubble");
+  renderSpeechBubble("rivalBubble");
+}
+
 function hideSpeechBubbleStyles(el) {
   if (!el) return;
   el.style.width = "";
@@ -2853,25 +2902,58 @@ function togglePhraseMenu() {
   }
 }
 
-function showBubble(bubbleId, text) {
+function renderSpeechBubble(bubbleId, withAnim = false) {
   const b = $(bubbleId);
-  if (!b) return;
-  b.textContent = text;
+  const st = _bubbleState[bubbleId];
+  if (!b || !st) return;
+  const phrase = String(st.phraseText || "").trim();
+  const offer = String(st.offerText || "").trim();
+  if (!phrase && !offer) {
+    b.classList.add("hidden");
+    b.setAttribute("aria-hidden", "true");
+    hideSpeechBubbleStyles(b);
+    b.replaceChildren();
+    return;
+  }
+  const nodes = [];
+  if (phrase) {
+    const phraseEl = document.createElement("div");
+    phraseEl.className = "speech-main";
+    phraseEl.textContent = phrase;
+    nodes.push(phraseEl);
+  }
+  if (offer) {
+    const offerEl = document.createElement("div");
+    offerEl.className = "speech-offer";
+    offerEl.textContent = `Oferta: ${offer}`;
+    nodes.push(offerEl);
+  }
+  b.replaceChildren(...nodes);
   b.classList.remove("hidden");
   b.setAttribute("aria-hidden", "false");
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       positionSpeechBubble(bubbleId);
-      b.style.animation = "none";
-      void b.offsetWidth;
-      b.style.animation = "";
+      if (withAnim) {
+        b.style.animation = "none";
+        void b.offsetWidth;
+        b.style.animation = "";
+      }
     });
   });
-  clearTimeout(b._hideTimer);
-  b._hideTimer = setTimeout(() => {
-    b.classList.add("hidden");
-    b.setAttribute("aria-hidden", "true");
-    hideSpeechBubbleStyles(b);
+}
+
+function showBubble(bubbleId, text) {
+  const b = $(bubbleId);
+  const st = _bubbleState[bubbleId];
+  if (!b || !st) return;
+  st.phraseText = String(text || "").trim();
+  renderSpeechBubble(bubbleId, true);
+  if (st.phraseTimer) clearTimeout(st.phraseTimer);
+  st.phraseTimer = setTimeout(() => {
+    st.phraseText = "";
+    st.phraseTimer = null;
+    renderSpeechBubble(bubbleId);
   }, 4000);
 }
 window.showBubble = showBubble;
@@ -2943,6 +3025,16 @@ export function detachRoomListeners() {
     _unsubPhrases();
     _unsubPhrases = null;
   }
+  for (const id of ["myBubble", "rivalBubble"]) {
+    const st = _bubbleState[id];
+    if (st?.phraseTimer) clearTimeout(st.phraseTimer);
+    if (st) {
+      st.phraseTimer = null;
+      st.phraseText = "";
+      st.offerText = "";
+    }
+    renderSpeechBubble(id);
+  }
 }
 
 // --- Boot: initApp ------------------------------------------------------------
@@ -2976,6 +3068,8 @@ function initLegalModal() {
 }
 
 let _openCreateRoomModal = () => {};
+let _openPrivateCodeModal = (_mode) => {};
+let _openLeaveConfirmModal = () => Promise.resolve(false);
 
 function initCreateRoomModal() {
   const modal = $("createRoomModal");
@@ -3025,11 +3119,130 @@ function initCreateRoomModal() {
   });
 }
 
+function initPrivateCodeModal() {
+  const modal = $("privateCodeModal");
+  const backdrop = $("privateCodeModalBackdrop");
+  const cancel = $("privateCodeModalCancel");
+  const submit = $("privateCodeModalSubmit");
+  const input = $("privateCodeInput");
+  const title = $("privateCodeModalTitle");
+  const sub = $("privateCodeModalSub");
+  if (!modal || !backdrop || !cancel || !submit || !input || !title || !sub)
+    return;
+
+  let mode = "join";
+
+  const hide = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+
+  _openPrivateCodeModal = (nextMode) => {
+    mode = nextMode === "create" ? "create" : "join";
+    const isCreate = mode === "create";
+    title.textContent = isCreate
+      ? "🔒 Crear sala privada"
+      : "🔑 Unir-se a sala privada";
+    sub.textContent = isCreate
+      ? "Escriu el codi de la sala privada per crear-la."
+      : "Escriu el codi de la sala privada per entrar.";
+    submit.textContent = isCreate ? "Continuar" : "Unir-se";
+    input.value = "";
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    input.focus();
+  };
+
+  const submitCode = () => {
+    const code = sanitize(input.value);
+    if (mode === "create") {
+      _pendingCreateVisibility = "private";
+      if (code.length < 2) {
+        _pendingCreateVisibility = "public";
+        setLobbyMsg("Codi massa curt.", "err");
+        input.focus();
+        return;
+      }
+      if ($("roomInput")) $("roomInput").value = code;
+      hide();
+      _openCreateRoomModal();
+      return;
+    }
+
+    if (!code) {
+      setLobbyMsg("Escriu un codi de sala.", "err");
+      input.focus();
+      return;
+    }
+    if ($("roomInput")) $("roomInput").value = code;
+    hide();
+    joinRoom();
+  };
+
+  cancel.addEventListener("click", () => {
+    if (mode === "create") _pendingCreateVisibility = "public";
+    hide();
+  });
+  backdrop.addEventListener("click", () => {
+    if (mode === "create") _pendingCreateVisibility = "public";
+    hide();
+  });
+  submit.addEventListener("click", submitCode);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitCode();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+      if (mode === "create") _pendingCreateVisibility = "public";
+      hide();
+    }
+  });
+}
+
+function initLeaveConfirmModal() {
+  const modal = $("leaveConfirmModal");
+  const backdrop = $("leaveConfirmModalBackdrop");
+  const cancel = $("leaveConfirmModalCancel");
+  const submit = $("leaveConfirmModalSubmit");
+  if (!modal || !backdrop || !cancel || !submit) return;
+
+  let resolver = null;
+
+  const close = (accepted) => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+    if (resolver) {
+      resolver(Boolean(accepted));
+      resolver = null;
+    }
+  };
+
+  _openLeaveConfirmModal = () =>
+    new Promise((resolve) => {
+      resolver = resolve;
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+      submit.focus();
+    });
+
+  cancel.addEventListener("click", () => close(false));
+  submit.addEventListener("click", () => close(true));
+  backdrop.addEventListener("click", () => close(false));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) close(false);
+  });
+}
+
 export function initApp() {
   configureActions({ renderAll });
   initAuthFlow();
   initLegalModal();
   initCreateRoomModal();
+  initPrivateCodeModal();
+  initLeaveConfirmModal();
   limpiarSalasAntiguas(); // sin await, que corra en segundo plano
   $("btn-crear-publica")?.addEventListener("click", () => {
     _pendingCreateVisibility = "public";
@@ -3037,34 +3250,10 @@ export function initApp() {
     _openCreateRoomModal();
   });
   $("btn-crear-privada")?.addEventListener("click", () => {
-    _pendingCreateVisibility = "private";
-    const raw = window.prompt(
-      "Introdueix el codi de la sala privada (4–8 caràcters alfanumèrics):",
-      "",
-    );
-    if (raw == null) {
-      _pendingCreateVisibility = "public";
-      return;
-    }
-    const code = sanitize(raw);
-    if (code.length < 2) {
-      _pendingCreateVisibility = "public";
-      setLobbyMsg("Codi massa curt.", "err");
-      return;
-    }
-    if ($("roomInput")) $("roomInput").value = code;
-    _openCreateRoomModal();
+    _openPrivateCodeModal("create");
   });
   $("btn-unirse-codigo")?.addEventListener("click", () => {
-    const raw = window.prompt("Introdueix el codi de la sala:", "");
-    if (raw == null) return;
-    const code = sanitize(raw);
-    if (!code) {
-      setLobbyMsg("Escriu un codi de sala.", "err");
-      return;
-    }
-    if ($("roomInput")) $("roomInput").value = code;
-    joinRoom();
+    _openPrivateCodeModal("join");
   });
   $("btn-invitado")?.addEventListener("click", async () => {
     clearAuthErr();
@@ -3098,7 +3287,11 @@ export function initApp() {
       console.error("signOut lobby:", err);
     }
   });
-  $("leaveBtn").addEventListener("click", leaveRoom);
+  $("leaveBtn").addEventListener("click", async () => {
+    const wantsToLeave = await _openLeaveConfirmModal();
+    if (!wantsToLeave) return;
+    await leaveRoom();
+  });
   $("goLeaveBtn").addEventListener("click", leaveRoom);
   $("backToMainBtn")?.addEventListener("click", async () => {
     sndBtn();

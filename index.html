@@ -132,7 +132,6 @@ PANTALLA 2 · MESA DE JUEGO
   <div id="hud">
     <div class="hud-left">
       <span id="hudRoom" class="hud-pill">—</span>
-      <span id="hudSeat" class="hud-pill">—</span>
     </div>
     <div class="hud-center">
       <span id="hudScore0" class="hud-score-num">0</span>
@@ -140,7 +139,6 @@ PANTALLA 2 · MESA DE JUEGO
       <span id="hudScore1" class="hud-score-num">0</span>
     </div>
     <div class="hud-right">
-      <span id="hudState" class="hud-pill">—</span>
       <button id="leaveBtn" class="hud-leave">Eixir</button>
     </div>
   </div>
@@ -389,12 +387,14 @@ PANTALLA 2 · MESA DE JUEGO
           <input type="radio" name="crcPts" value="12" checked />
           <span class="crc-opt-card">
             <span class="crc-opt-title">12 pedres</span>
+            <span class="crc-opt-hint">Partida curta</span>
           </span>
         </label>
         <label class="crc-opt">
           <input type="radio" name="crcPts" value="24" />
           <span class="crc-opt-card">
             <span class="crc-opt-title">24 pedres</span>
+            <span class="crc-opt-hint">Partida llarga</span>
           </span>
         </label>
       </div>
@@ -427,6 +427,75 @@ PANTALLA 2 · MESA DE JUEGO
       </button>
       <button type="button" class="lbtn lbtn-primary create-room-btn-primary" id="createRoomModalSubmit">
         Crear sala
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: codi sala privada -->
+<div
+  id="privateCodeModal"
+  class="create-room-modal hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="privateCodeModalTitle"
+  aria-hidden="true"
+>
+  <div class="create-room-backdrop" id="privateCodeModalBackdrop"></div>
+  <div class="create-room-panel private-code-panel">
+    <div class="create-room-head">
+      <h2 id="privateCodeModalTitle" class="create-room-title">Sala privada</h2>
+      <p id="privateCodeModalSub" class="create-room-sub">
+        Escriu el codi de la sala privada.
+      </p>
+    </div>
+    <label class="private-code-field" for="privateCodeInput">
+      Codi de sala
+    </label>
+    <input
+      id="privateCodeInput"
+      class="private-code-input"
+      type="text"
+      inputmode="text"
+      autocomplete="off"
+      spellcheck="false"
+      maxlength="8"
+      placeholder="Ex: ABC123"
+    />
+    <div class="create-room-actions">
+      <button type="button" class="create-room-btn-secondary" id="privateCodeModalCancel">
+        Cancel·lar
+      </button>
+      <button type="button" class="lbtn lbtn-primary create-room-btn-primary" id="privateCodeModalSubmit">
+        Continuar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: confirmar eixida de la partida -->
+<div
+  id="leaveConfirmModal"
+  class="create-room-modal hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="leaveConfirmModalTitle"
+  aria-hidden="true"
+>
+  <div class="create-room-backdrop" id="leaveConfirmModalBackdrop"></div>
+  <div class="create-room-panel private-code-panel">
+    <div class="create-room-head">
+      <h2 id="leaveConfirmModalTitle" class="create-room-title">Eixir de la partida?</h2>
+      <p class="create-room-sub">
+        Si ixes ara, perdràs la partida actual. Vols continuar igualment?
+      </p>
+    </div>
+    <div class="create-room-actions">
+      <button type="button" class="create-room-btn-secondary" id="leaveConfirmModalCancel">
+        Quedar-me
+      </button>
+      <button type="button" class="create-room-btn-danger" id="leaveConfirmModalSubmit">
+        Eixir i perdre
       </button>
     </div>
   </div>

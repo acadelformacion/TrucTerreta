@@ -122,6 +122,8 @@ export async function dealHand() {
 
     state.hand = Logica.makeHand(state.mano);
     state.status = "playing";
+    // Evita que `lastAllTricks` de la mà anterior confonga el render entre mans / ofertes
+    state.lastAllTricks = [];
     pushLog(state, `Ma #${real(state.handNumber) + 1}. Torn: J${state.mano}.`);
     return true;
   });
@@ -325,10 +327,13 @@ export async function respondEnvit(choice) {
         responder: resp,
         offeredLevel: offer.level,
         acceptedBy: null,
+        ...(offer.level === "falta"
+          ? { faltaFromLevel: offer.faltaFromLevel ?? null }
+          : {}),
       };
       h.envitAvailable = false;
       const nomCaller = pName(state, caller);
-      pushLog(state, `No vull l'envit. +1 per a ${nomCaller}.`);
+      pushLog(state, `No vull l'envit. Puntuació al final de la mà.`);
       resumeOffer(state);
       return true;
     }
@@ -342,7 +347,13 @@ export async function respondEnvit(choice) {
       return true;
     }
     if (choice === "falta") {
-      h.pendingOffer = { kind: "envit", level: "falta", by: resp, to: caller };
+      h.pendingOffer = {
+        kind: "envit",
+        level: "falta",
+        by: resp,
+        to: caller,
+        faltaFromLevel: offer.level === 4 ? 4 : 2,
+      };
       h.turn = caller;
       h.mode = "respond_envit";
       h.envitAvailable = false;
@@ -434,6 +445,9 @@ export async function timeoutTurn() {
           responder: session.mySeat,
           offeredLevel: h.pendingOffer.level,
           acceptedBy: null,
+          ...(h.pendingOffer.level === "falta"
+            ? { faltaFromLevel: h.pendingOffer.faltaFromLevel ?? null }
+            : {}),
         };
         h.envitAvailable = false;
         pushLog(state, "Temps. Envit rebutjat auto.");

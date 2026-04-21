@@ -273,7 +273,13 @@ export function applyHandEnd(state, reason, foldedSeat) {
     // sin depender de scoreAwards escrito en una transacción anterior
     const ec = h.envit.caller;
     const lvl = h.envit.offeredLevel;
-    const ep = lvl === 4 || lvl === "falta" ? 2 : 1;
+    let ep = 1;
+    if (lvl === "falta") {
+      const ff = h.envit.faltaFromLevel;
+      if (ff === 4) ep = 4;
+      else if (ff === 2) ep = 2;
+      else ep = 1;
+    } else if (lvl === 4) ep = 2;
     addScore(state, ec, ep);
     const ewName = state.players?.[K(ec)]?.name || `J${ec}`;
     pushLog(state, `Envit rebutjat: guanya ${ewName} (+${ep}).`);
@@ -281,9 +287,13 @@ export function applyHandEnd(state, reason, foldedSeat) {
   } else if (isFold && h.pendingOffer?.kind === "envit") {
     // ¡AQUÍ ESTÁ EL CAMBIO! Si alguien se va al mazo con un envite/falta pendiente de responder:
     const off = h.pendingOffer;
-    // Si me habían cantado Falta (sobre un envite previo) o un Torne (4) y me voy, son 2 puntos.
-    // Si solo me habían envidado de primeras y me voy, es 1 punto.
-    const puntos = off.level === "falta" || off.level === 4 ? 2 : 1;
+    let puntos = 1;
+    if (off.level === "falta") {
+      const ff = off.faltaFromLevel;
+      if (ff === 4) puntos = 4;
+      else if (ff === 2) puntos = 2;
+      else puntos = 1;
+    } else if (off.level === 4) puntos = 2;
 
     addScore(state, winnerSeat, puntos);
     pushLog(state, `Envit abandonat: +${puntos} per al rival.`);
