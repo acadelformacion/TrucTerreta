@@ -1,6 +1,11 @@
 // --- Truc Valencià . game.js (entrada) --------------------------------------
 // Únic punt de veritat per a la transició login ↔ lobby: `onAuthStateChanged`.
-import { auth, onAuthStateChanged, resetSession } from "./firebase.js";
+import {
+  auth,
+  onAuthStateChanged,
+  resetSession,
+  logAppEvent,
+} from "./firebase.js";
 import {
   initApp,
   tryReconnectFromLocalStorage,
@@ -109,6 +114,7 @@ function applySignedOutUi() {
 }
 
 initApp();
+logAppEvent("game_loaded");
 
 onAuthStateChanged(auth, async (user) => {
   if (user) {

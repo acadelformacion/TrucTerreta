@@ -1149,10 +1149,32 @@ body {
 .my-card-wrap.playable {
   cursor: pointer;
 }
+.my-card-wrap.playable .playing-card {
+  border-color: rgba(255, 214, 90, 0.9);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(255, 214, 90, 0.7),
+    0 0 10px rgba(255, 214, 90, 0.22);
+  animation: playableCardNudge 5s ease-in-out infinite;
+  will-change: transform, box-shadow;
+}
 .my-card-wrap.playable:hover .playing-card {
+  animation-play-state: paused;
+  border-color: var(--gold);
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.8),
     0 0 0 2px var(--gold);
+  transform: translateY(-6px);
+}
+@keyframes playableCardNudge {
+  0%,
+  92%,
+  100% {
+    transform: translateY(0);
+  }
+  96% {
+    transform: translateY(-2px);
+  }
 }
 
 /* Cartes (playing-card) */
@@ -2322,6 +2344,12 @@ body {
 .msg-rival {
   top: 30%;
 }
+.msg-center {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  animation: bubblePopCenter 1.4s ease-out forwards;
+}
 
 @keyframes bubblePop {
   0% {
@@ -2342,6 +2370,25 @@ body {
   }
 }
 
+@keyframes bubblePopCenter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.3);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 24px)) scale(1.1);
+  }
+}
+
 /* Zona activa del torn (noms) */
 #myZone.turn-active .player-name {
   color: var(--gold);
@@ -2358,6 +2405,46 @@ body {
   }
   50% {
     opacity: 0.4;
+  }
+}
+
+/* Indicador lateral de torn (fletxa suau) */
+#rivalZone.turn-active .rival-header::before,
+#myZone.turn-active .my-zone-header::before {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 12px solid var(--gold);
+  filter: drop-shadow(0 0 7px rgba(255, 214, 90, 0.4));
+  animation: turnArrowBlink 1.5s ease-in-out infinite;
+}
+
+#rivalZone.turn-active .rival-header::before {
+  border-left-color: #f0a0a0;
+  filter: drop-shadow(0 0 7px rgba(240, 160, 160, 0.38));
+}
+
+@keyframes turnArrowBlink {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-card-wrap.playable .playing-card,
+  #rivalZone.turn-active .rival-header::before,
+  #myZone.turn-active .my-zone-header::before {
+    animation: none !important;
   }
 }
 
@@ -2763,6 +2850,8 @@ body {
   pointer-events: auto;
 }
 #gameOverOverlay .overlay-card {
+  position: relative;
+  z-index: 1;
   background: rgba(8, 16, 12, 0.78) !important;
   border: 1px solid rgba(255, 255, 255, 0.18) !important;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7) !important;

@@ -19,6 +19,10 @@ import {
   onAuthStateChanged,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getAnalytics,
+  logEvent,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBHQ3hSWToVKzADI9eUlCNONbi_lN_TTAI",
@@ -29,11 +33,26 @@ export const firebaseConfig = {
   storageBucket: "trucvalencia-12345.firebasestorage.app",
   messagingSenderId: "922530958932",
   appId: "1:922530958932:web:84fe1d9386f5ea2d6f67c1",
+  measurementId: "G-VSTR2KB00Q",
 };
 
 const app = initializeApp(firebaseConfig);
 export const db = getDatabase();
 export const auth = getAuth(app);
+export const analytics = getAnalytics(app);
+
+/**
+ * Wrapper genérico para eventos de Analytics.
+ * Ús: logAppEvent("event_name", { key: "value" })
+ */
+export function logAppEvent(eventName, params = undefined) {
+  if (!analytics || !eventName) return;
+  if (params && typeof params === "object") {
+    logEvent(analytics, eventName, params);
+    return;
+  }
+  logEvent(analytics, eventName);
+}
 
 /** Referencias mutables compartidas entre módulos (misma referencia de objeto) */
 export const session = {

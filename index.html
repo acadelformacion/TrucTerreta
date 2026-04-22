@@ -79,7 +79,7 @@ PANTALLA 1 · LOBBY
           <span class="user-profile-wins">Victòries: <strong id="user-wins-count">0</strong></span>
         </div>
       </div>
-      <button type="button" id="lobbyEixirBtn" class="lobby-eixir-btn">Eixir</button>
+      <button type="button" id="lobbyEixirBtn" class="lobby-eixir-btn hud-leave">Eixir</button>
     </div>
 
     <div class="lobby-hub-main">
@@ -225,6 +225,14 @@ PANTALLA 2 · MESA DE JUEGO
       <button class="cfg-opt" data-cfg="sound" data-val="false">No</button>
     </div>
   </div>
+
+  <div class="cfg-section">
+    <div class="cfg-label">📳 Vibració</div>
+    <div class="cfg-options">
+      <button class="cfg-opt" data-cfg="vibration" data-val="true">Sí</button>
+      <button class="cfg-opt" data-cfg="vibration" data-val="false">No</button>
+    </div>
+  </div>
 </div>
 
   <!-- PANEL ACCIONES inferior -->
@@ -345,7 +353,7 @@ PANTALLA 2 · MESA DE JUEGO
 
   <!-- ── OVERLAY: FIN PARTIDA ── -->
   <div id="gameOverOverlay" class="overlay hidden">
-    <canvas id="confettiCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:99;"></canvas>
+    <canvas id="confettiCanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
     <div class="overlay-card go-card">
       <div class="ov-title" id="goTitle">Partida acabada</div>
       <div id="goWinner" class="go-winner">—</div>
@@ -548,6 +556,7 @@ PANTALLA 2 · MESA DE JUEGO
   <div id="vsText" class="versus-vs">VS</div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
 <script type="module" src="game.js"></script>
 </body>

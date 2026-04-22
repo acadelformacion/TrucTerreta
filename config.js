@@ -4,8 +4,10 @@ const CONFIG_KEY = "trucConfig";
 
 const DEFAULT_CONFIG = {
   buttonSize: "normal", // 'normal' | 'large'
+  cardDeck: "classic", // 'classic' | (añade más aquí)
   tableBackground: "green", // 'green' | 'bg2' | (añade más aquí)
   sound: true, // true | false
+  vibration: true, // true | false
 };
 
 // Carga config desde localStorage, fusionando con defaults
@@ -49,4 +51,8 @@ export function applyConfig(cfg = loadConfig()) {
 // Consulta rápida para las funciones de audio en ui.js
 export function isSoundEnabled() {
   return loadConfig().sound !== false;
+}
+
+export function isVibrationEnabled() {
+  return loadConfig().vibration !== false;
 }

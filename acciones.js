@@ -79,6 +79,7 @@ export function defaultState() {
       modoJuego: "1v1",
       maxJugadores: 2,
     },
+    openingIntroAt: 0,
   };
 }
 
@@ -118,6 +119,7 @@ export async function dealHand() {
       if (!state.ready) state.ready = { [K(0)]: false, [K(1)]: false };
       if (!state.ready[K(0)] || !state.ready[K(1)]) return false;
       state.mano = Math.random() < 0.5 ? 0 : 1;
+      state.openingIntroAt = Date.now();
     }
 
     state.hand = Logica.makeHand(state.mano);
@@ -477,7 +479,7 @@ export async function timeoutTurn() {
 
 export async function requestRematch() {
   if (!session.roomRef || session.mySeat === null) return;
-  const { resetHandIntroPlayed } = await import("./ui.js");
+        const { resetHandIntroPlayed } = await import("./renderGame.js");
   resetHandIntroPlayed();
   await mutate((state) => {
     if (!state.rematch) state.rematch = { [K(0)]: false, [K(1)]: false };
