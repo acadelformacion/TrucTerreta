@@ -81,6 +81,20 @@ import {
 import { warmupMatchAssets } from "./assetPreloader.js";
 let _actionInProgress = false;
 const $ = (id) => document.getElementById(id);
+
+function offerCallText(kind, level) {
+  if (kind === "envit") {
+    if (level === "falta") return "Falta!!!";
+    if (Number(level) >= 4) return "Torne a envidar!";
+    return "Envide!";
+  }
+  if (kind === "truc") {
+    if (Number(level) === 4) return "Val 4!!!";
+    if (Number(level) === 3) return "Retruque!!";
+    return "Truque!";
+  }
+  return "";
+}
 // Sincronizar ui.locked con _actionInProgress para que se bloqueen juntos
 Object.defineProperty(ui, "locked", {
   get() {
@@ -577,7 +591,7 @@ export function initApp() {
     if (ui.locked) return;
     ui.locked = true;
     sndBtn();
-    showTableMsg("Envide!", true);
+    showTableMsg(offerCallText("envit", 2), true);
     try {
       await startOffer("envit");
     } finally {
@@ -595,7 +609,7 @@ export function initApp() {
     if (ui.locked) return;
     ui.locked = true;
     sndBtn();
-    showTableMsg("Falta!", true);
+    showTableMsg(offerCallText("envit", "falta"), true);
     try {
       await startOffer("falta");
     } finally {
@@ -613,7 +627,13 @@ export function initApp() {
     if (ui.locked) return;
     ui.locked = true;
     sndBtn();
-    showTableMsg($("trucBtn").textContent + "!", true);
+    const trucBtnLabel = String($("trucBtn").textContent || "").trim();
+    const trucLevel = /val\s*4/i.test(trucBtnLabel)
+      ? 4
+      : /retruc/i.test(trucBtnLabel)
+        ? 3
+        : 2;
+    showTableMsg(offerCallText("truc", trucLevel), true);
     try {
       await startOffer("truc");
     } finally {

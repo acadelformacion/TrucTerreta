@@ -152,9 +152,11 @@ function buildBack() {
 
 // --- Mensajes de mesa ---------------------------------------------------------
 function showTableMsgLocal(text, isMine = true) {
+  const cleaned = String(text || "").trim();
+  if (!cleaned) return;
   const bubble = document.createElement("div");
   bubble.className = `table-msg-bubble ${isMine ? "msg-mine" : "msg-rival"}`;
-  bubble.textContent = text.toUpperCase() + "!";
+  bubble.textContent = cleaned;
   document.body.appendChild(bubble);
   setTimeout(() => {
     if (bubble) bubble.remove();
@@ -170,6 +172,20 @@ export function showTableMsg(text, isMine = true) {
       sender: session.mySeat,
     }).catch(() => {});
   }
+}
+
+function offerCallText(offerKind, offerLevel) {
+  if (offerKind === "envit") {
+    if (offerLevel === "falta") return "Falta!!!";
+    if (Number(offerLevel) >= 4) return "Torne a envidar!";
+    return "Envide!";
+  }
+  if (offerKind === "truc") {
+    if (Number(offerLevel) === 4) return "Val 4!!!";
+    if (Number(offerLevel) === 3) return "Retruque!!";
+    return "Truque!";
+  }
+  return "";
 }
 
 // --- Resumen de puntos entre manos --------------------------------------------
@@ -668,7 +684,21 @@ function renderActions(state) {
       if (ui.locked) return;
       ui.locked = true;
       sndBtn();
-      showTableMsg(l);
+      const callText =
+        cls === "btn-envit-1"
+          ? offerCallText("envit", 2)
+          : cls === "btn-envit-2"
+            ? offerCallText("envit", 4)
+            : cls === "btn-envit-3"
+              ? offerCallText("envit", "falta")
+              : cls === "btn-truc-1"
+                ? offerCallText("truc", 2)
+                : cls === "btn-truc-2"
+                  ? offerCallText("truc", 3)
+                  : cls === "btn-truc-3"
+                    ? offerCallText("truc", 4)
+                    : l;
+      showTableMsg(callText);
       try {
         await fn();
       } finally {

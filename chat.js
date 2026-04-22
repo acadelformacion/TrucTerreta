@@ -196,14 +196,14 @@ export function onGameViewportChange() {
 function offerTextFromPendingOffer(offer) {
   if (!offer) return "";
   if (offer.kind === "envit") {
-    if (offer.level === "falta") return "Falta";
-    if (Number(offer.level) >= 4) return "Torne";
-    return "Envidar";
+    if (offer.level === "falta") return "Falta!!!";
+    if (Number(offer.level) >= 4) return "Torne a envidar!";
+    return "Envide!";
   }
   if (offer.kind === "truc") {
-    if (Number(offer.level) === 4) return "Val 4";
-    if (Number(offer.level) === 3) return "Retruque";
-    return "Truc";
+    if (Number(offer.level) === 4) return "Val 4!!!";
+    if (Number(offer.level) === 3) return "Retruque!!";
+    return "Truque!";
   }
   return "";
 }
@@ -251,19 +251,38 @@ export function renderSpeechBubble(bubbleId, withAnim = false) {
     offerEl.textContent = offer;
     nodes.push(offerEl);
   }
+  const vv = window.visualViewport;
+  const vw = vv?.width ?? window.innerWidth;
+  const pad = 12;
+  const maxBw = Math.min(SPEECH_BUBBLE_MAX_W, Math.max(80, vw - pad * 2));
+
+  const measure = document.createElement("div");
+  measure.className = b.className.replace(/\bhidden\b/g, "").trim();
+  measure.style.position = "fixed";
+  measure.style.left = "-10000px";
+  measure.style.top = "0";
+  measure.style.visibility = "hidden";
+  measure.style.width = "auto";
+  measure.style.maxWidth = `${maxBw}px`;
+  measure.style.pointerEvents = "none";
+  const measureNodes = nodes.map((n) => n.cloneNode(true));
+  measure.replaceChildren(...measureNodes);
+  document.body.appendChild(measure);
+  const measured = Math.ceil(measure.getBoundingClientRect().width);
+  measure.remove();
+  const bw = Math.min(maxBw, Math.max(56, measured));
+
+  b.style.maxWidth = `${maxBw}px`;
+  b.style.width = `${bw}px`;
   b.replaceChildren(...nodes);
   b.classList.remove("hidden");
   b.setAttribute("aria-hidden", "false");
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      positionSpeechBubble(bubbleId);
-      if (withAnim) {
-        b.style.animation = "none";
-        void b.offsetWidth;
-        b.style.animation = "";
-      }
-    });
-  });
+  positionSpeechBubble(bubbleId);
+  if (withAnim) {
+    b.style.animation = "none";
+    void b.offsetWidth;
+    b.style.animation = "";
+  }
 }
 
 export function showBubble(bubbleId, text) {
