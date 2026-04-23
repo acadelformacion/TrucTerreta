@@ -99,7 +99,7 @@ body {
   gap: 20px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(24, 36, 31, 0.82);
+  background: rgba(30, 88, 58, 0.85);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
 }
 
@@ -964,23 +964,37 @@ body {
   width: auto;
 }
 
+/* Bot vs IA: mateixa fila, a la dreta, fons blau; text en 2 línies */
+.lobby-hub-footer-row #botBtn.lobby-hub-btn-bot {
+  flex: 0 1 auto;
+  margin-left: auto;
+  width: auto;
+  max-width: 32%;
+  min-width: 0;
+  padding-inline: 8px !important;
+  text-align: center;
+}
+
 /* Botons secundaris del lobby: més baixos i discrets que la sala pública */
 .lobby-hub-btn-compact {
-  padding: 9px 10px !important;
-  font-size: 13px !important;
+  padding: 10px 8px !important;
+  font-size: 12px !important;
   border-radius: 10px !important;
   font-weight: 600 !important;
   line-height: 1.2;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  word-break: keep-all;
 }
 
 @media (max-width: 520px) {
-  #btn-crear-privada,
-  #btn-unirse-codigo {
-    white-space: normal;
-    line-height: 1.15;
-    text-align: center;
-    word-break: keep-all;
+  .lobby-hub-footer-row .lobby-hub-btn-compact {
+    font-size: 11px !important;
+    padding: 9px 6px !important;
+  }
+  .lobby-hub-footer-row #botBtn.lobby-hub-btn-bot {
+    max-width: 30%;
+    padding-inline: 6px !important;
   }
 }
 
@@ -1030,6 +1044,18 @@ body {
 }
 .lbtn-secondary:hover {
   background: rgba(255, 255, 255, 0.13);
+}
+.lbtn-lobby-bot {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  color: #f0f7ff;
+  border: 1px solid rgba(147, 197, 253, 0.45);
+}
+.lbtn-lobby-bot:hover {
+  filter: brightness(1.06);
+  border-color: rgba(191, 219, 254, 0.65);
+}
+.lbtn-lobby-bot:active {
+  filter: brightness(0.96);
 }
 .lobby-msg {
   font-size: 13px;
@@ -3076,7 +3102,7 @@ body {
   font-size: clamp(14px, 3.6vw, 20px);
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: rgba(255, 248, 220, 0.72);
+  color: rgb(255, 248, 220);
   margin-bottom: 6px;
   text-shadow:
     0 1px 0 rgba(0, 0, 0, 0.45),

@@ -182,12 +182,22 @@ function buildActionMask(state, seat) {
   const myCards = fromHObj(h.hands?.[K(seat)]);
   const nc = myCards.length;
   const alreadyPlayed = getPlayed(h, seat) !== null;
+  const tricksDone = (h.trickHistory || []).length;
+  const noTricksPlayed = tricksDone === 0;
+  const noTrucAtAll =
+    h.truc?.state === 'none' && !(po?.kind === 'truc');
 
   if (mode === 'normal' && !po) {
     if (!alreadyPlayed) {
       for (let i = 0; i < nc; i++) mask[i] = 1.0;
     }
-    if (h.envitAvailable && h.envit?.state === 'none') {
+    if (
+      h.envitAvailable &&
+      h.envit?.state === 'none' &&
+      noTricksPlayed &&
+      !alreadyPlayed &&
+      noTrucAtAll
+    ) {
       mask[3] = 1.0; mask[4] = 1.0;
     }
     const tr = h.truc;
@@ -205,7 +215,13 @@ function buildActionMask(state, seat) {
     mask[10] = 1.0; mask[11] = 1.0;
     if (po.level === 2) mask[12] = 1.0;
     if (po.level === 3) mask[13] = 1.0;
-    if (h.envitAvailable && h.envit?.state === 'none') {
+    // Igual que renderActions (canEnvitInTruc): solo en 1a baza i sense carta jugada
+    if (
+      h.envitAvailable &&
+      h.envit?.state === 'none' &&
+      noTricksPlayed &&
+      !alreadyPlayed
+    ) {
       mask[3] = 1.0; mask[4] = 1.0;
     }
   }

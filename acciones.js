@@ -1,5 +1,6 @@
 // --- Acciones de partida (mutaciones via Firebase) ----------------------------
 import { session, mutate as mutateFirebase, get } from "./firebase.js";
+import { isBotActive } from "./bot.js";
 import * as Logica from "./logica.js";
 
 const K = (n) => `_${n}`;
@@ -112,6 +113,18 @@ export function configureActions({ renderAll }) {
   _renderAll = renderAll;
 }
 
+/** Força render després de mutate (onValue sol no arriba o arriba tard). */
+function pullRoomAndRender() {
+  if (!session.roomRef) return;
+  queueMicrotask(() => {
+    get(session.roomRef)
+      .then((snap) => {
+        if (snap.val()) _renderAll(snap.val());
+      })
+      .catch(() => {});
+  });
+}
+
 export const ui = { locked: false };
 
 export async function dealHand() {
@@ -135,6 +148,7 @@ export async function dealHand() {
     pushLog(state, `Ma #${real(state.handNumber) + 1}. Torn: J${state.mano}.`);
     return true;
   });
+  pullRoomAndRender();
 }
 
 export async function playCard(card) {
@@ -267,6 +281,7 @@ export async function goMazo() {
     Logica.applyHandEnd(state, `${nom} se'n va.`, session.mySeat);
     return true;
   });
+  pullRoomAndRender();
 }
 
 export async function startOffer(kind) {
@@ -280,6 +295,14 @@ export async function startOffer(kind) {
     if (kind === "envit" || kind === "falta") {
       if (!(h.mode === "normal" || h.mode === "respond_truc")) return false;
       if (!h.envitAvailable || h.envit.state !== "none") return false;
+      const tricksDone = (h.trickHistory || []).length;
+      if (tricksDone !== 0) return false;
+      if (alreadyPlayed(h, session.mySeat)) return false;
+      if (h.mode === "normal") {
+        const noTrucAtAll =
+          h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
+        if (!noTrucAtAll) return false;
+      }
 
       const level = kind === "falta" ? "falta" : 2;
 
@@ -336,6 +359,7 @@ export async function startOffer(kind) {
     }
     return false;
   });
+  pullRoomAndRender();
 }
 
 export async function startOfferAsBot(kind) {
@@ -349,6 +373,14 @@ export async function startOfferAsBot(kind) {
     if (kind === "envit" || kind === "falta") {
       if (!(h.mode === "normal" || h.mode === "respond_truc")) return false;
       if (!h.envitAvailable || h.envit.state !== "none") return false;
+      const tricksDone = (h.trickHistory || []).length;
+      if (tricksDone !== 0) return false;
+      if (alreadyPlayed(h, botSeat)) return false;
+      if (h.mode === "normal") {
+        const noTrucAtAll =
+          h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
+        if (!noTrucAtAll) return false;
+      }
 
       const level = kind === "falta" ? "falta" : 2;
       h.resume = {
@@ -504,6 +536,7 @@ export async function respondEnvit(choice) {
     }
     return false;
   });
+  pullRoomAndRender();
 }
 
 export async function respondEnvitAsBot(choice) {
@@ -667,6 +700,7 @@ export async function respondTruc(choice) {
     }
     return false;
   });
+  pullRoomAndRender();
 }
 
 export async function respondTrucAsBot(choice) {
@@ -782,8 +816,29 @@ export async function timeoutTurn() {
 
 export async function requestRematch() {
   if (!session.roomRef || session.mySeat === null) return;
-        const { resetHandIntroPlayed } = await import("./renderGame.js");
+  const { resetHandIntroPlayed } = await import("./renderGame.js");
   resetHandIntroPlayed();
+
+  if (isBotActive()) {
+    await mutate((state) => {
+      if (state.status !== "game_over") return false;
+      state.status = "waiting";
+      state.scores = { [K(0)]: OFFSET, [K(1)]: OFFSET };
+      state.handNumber = OFFSET;
+      state.mano = other(state.mano);
+      state.hand = null;
+      state.winner = null;
+      state.gameEndReason = null;
+      state.rematch = { [K(0)]: false, [K(1)]: false };
+      state.ready = { [K(0)]: true, [K(1)]: true };
+      state.logs = [];
+      pushLog(state, "Revenja iniciada!");
+      return true;
+    });
+    await dealHand();
+    return;
+  }
+
   await mutate((state) => {
     if (!state.rematch) state.rematch = { [K(0)]: false, [K(1)]: false };
     state.rematch[K(session.mySeat)] = true;

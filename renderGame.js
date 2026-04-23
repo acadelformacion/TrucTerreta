@@ -969,6 +969,56 @@ async function executeBotAction(action, state) {
   }
 }
 
+/** Retard curt: menys solapament amb el refresh dels botons (600 ms). */
+const BOT_ACT_DELAY_MS = 250;
+
+function scheduleBotIfNeededFromGameState(state) {
+  if (!isBotActive() || _botThinking) return;
+  if (session.mySeat !== 0 && session.mySeat !== 1) return;
+  const botSeat = other(session.mySeat);
+  if (
+    state?.status !== "playing" ||
+    state?.hand?.status !== "in_progress" ||
+    state?.hand?.turn !== botSeat
+  )
+    return;
+
+  _botThinking = true;
+  setTimeout(() => {
+    let st = _lastRoom?.state;
+    if (
+      !st?.hand ||
+      st.status !== "playing" ||
+      st.hand.status !== "in_progress" ||
+      st.hand.turn !== botSeat
+    ) {
+      _botThinking = false;
+      return;
+    }
+    botAct(st)
+      .then(async (action) => {
+        if (action) {
+          await executeBotAction(action, st);
+          return;
+        }
+        st = _lastRoom?.state;
+        if (
+          !st?.hand ||
+          st.hand.turn !== botSeat ||
+          st.status !== "playing" ||
+          st.hand.status !== "in_progress"
+        )
+          return;
+        const action2 = await botAct(st);
+        if (action2) await executeBotAction(action2, st);
+      })
+      .catch((e) => console.error("bot error:", e))
+      .finally(() => {
+        _botThinking = false;
+      });
+  }, BOT_ACT_DELAY_MS);
+}
+
 // --- Timer de turno del rival ------------------------------------------------
 function updateRivalTimer(state) {
   const h = state.hand;
@@ -1140,6 +1190,12 @@ function renderRematchStatus(state) {
   if (!btn || !st) return;
   const myWant = !!state.rematch?.[K(session.mySeat)];
   const rivWant = !!state.rematch?.[K(other(session.mySeat))];
+  if (isBotActive()) {
+    btn.disabled = false;
+    btn.textContent = "\ud83d\udd04 Revenja";
+    st.textContent = "";
+    return;
+  }
   if (myWant && !rivWant) {
     btn.disabled = true;
     btn.textContent = "\u23f3 Esperant revenja...";
@@ -1307,6 +1363,8 @@ export function renderAll(room) {
     renderActions(state);
     renderLog(state);
     _prevStatus = state.status;
+    // El return anticipat saltava la programació del bot (truc/retruc durant la intro).
+    scheduleBotIfNeededFromGameState(state);
     return;
   }
 
@@ -1477,22 +1535,5 @@ export function renderAll(room) {
     }
   }
   _prevStatus = state.status;
-  if (isBotActive() && !_botThinking) {
-    const st = room?.state;
-    if (
-      st?.status === "playing" &&
-      st?.hand?.status === "in_progress" &&
-      st?.hand?.turn === 1
-    ) {
-      _botThinking = true;
-      setTimeout(async () => {
-        try {
-          const action = await botAct(st);
-          if (action) await executeBotAction(action, st);
-        } finally {
-          _botThinking = false;
-        }
-      }, 600);
-    }
-  }
+  scheduleBotIfNeededFromGameState(state);
 }
