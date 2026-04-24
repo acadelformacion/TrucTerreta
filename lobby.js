@@ -14,7 +14,7 @@ import { defaultState } from "./acciones.js";
 import * as Logica from "./logica.js";
 import { GUEST_LOBBY_AVATAR } from "./avatars.js";
 import { auth } from "./firebase.js";
-import { initBot, setBotActive } from "./bot.js";
+import { initBot, setBotActive, resetBotMemory } from "./bot.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -130,6 +130,7 @@ function saveLS(n, c, s) {
 // --- Crear sala --------------------------------------------------------------
 export async function createRoom() {
   setBotActive(false);
+  resetBotMemory();
   const vis = _pendingCreateVisibility === "private" ? "private" : "public";
   const name = normName($("nameInput")?.value);
   const code =
@@ -235,6 +236,7 @@ export async function createRoomAsBot(name) {
   if ($("roomInput")) $("roomInput").value = code;
   setLobbyMsg("", "");
   _pendingCreateVisibility = "public";
+  resetBotMemory();
   setBotActive(true);
   await initBot();
   _startSession(code);
@@ -244,6 +246,7 @@ export async function createRoomAsBot(name) {
 // --- Unir-se a sala ----------------------------------------------------------
 export async function joinRoom() {
   setBotActive(false);
+  resetBotMemory();
   const name = normName($("nameInput")?.value);
   const code = sanitize($("roomInput")?.value);
   if (!code) {

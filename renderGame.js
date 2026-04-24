@@ -41,7 +41,7 @@ import {
 import { bumpStoredWinsIfWonGame } from "./auth.js";
 import { setLobbyMsg } from "./lobby.js";
 import { isVibrationEnabled } from "./config.js";
-import { isBotActive, botAct } from "./bot.js";
+import { isBotActive, botAct, resetBotMemory, updateBotMemory } from "./bot.js";
 
 // --- Helpers locales ----------------------------------------------------------
 const $ = (id) => document.getElementById(id);
@@ -84,6 +84,7 @@ function getScore(st, seat) {
 
 // --- Estado de render ---------------------------------------------------------
 let _prevStatus = "";
+let _prevHandNumber = -1;
 let _introPlayed = false;
 let _lastState = null;
 let _lastRoom = null;
@@ -1363,6 +1364,19 @@ export function renderAll(room) {
     renderActions(state);
     renderLog(state);
     _prevStatus = state.status;
+    // Detectar fin de mano y actualizar memoria del bot
+    if (isBotActive() && state.lastHandSummary) {
+      const hn = real(state.handNumber || OFFSET);
+      if (hn !== _prevHandNumber) {
+        _prevHandNumber = hn;
+        const humanSeat = 1 - 1;
+        updateBotMemory(
+          state.lastHandSummary,
+          humanSeat,
+          state.scores,
+        );
+      }
+    }
     // El return anticipat saltava la programació del bot (truc/retruc durant la intro).
     scheduleBotIfNeededFromGameState(state);
     return;
@@ -1515,6 +1529,19 @@ export function renderAll(room) {
         startBetween(buildScoreSummary(state), handSummaryHasEnvit(state) ? 1000 : 0);
     }
     _prevStatus = state.status;
+    // Detectar fin de mano y actualizar memoria del bot
+    if (isBotActive() && state.lastHandSummary) {
+      const hn = real(state.handNumber || OFFSET);
+      if (hn !== _prevHandNumber) {
+        _prevHandNumber = hn;
+        const humanSeat = 1 - 1;
+        updateBotMemory(
+          state.lastHandSummary,
+          humanSeat,
+          state.scores,
+        );
+      }
+    }
     return;
   }
   $("waitingOverlay").classList.add("hidden");
@@ -1535,5 +1562,18 @@ export function renderAll(room) {
     }
   }
   _prevStatus = state.status;
+  // Detectar fin de mano y actualizar memoria del bot
+  if (isBotActive() && state.lastHandSummary) {
+    const hn = real(state.handNumber || OFFSET);
+    if (hn !== _prevHandNumber) {
+      _prevHandNumber = hn;
+      const humanSeat = 1 - 1;
+      updateBotMemory(
+        state.lastHandSummary,
+        humanSeat,
+        state.scores,
+      );
+    }
+  }
   scheduleBotIfNeededFromGameState(state);
 }

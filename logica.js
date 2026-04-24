@@ -318,6 +318,26 @@ function fullHandForSeat(h, seat) {
 export function applyHandEnd(state, reason, foldedSeat) {
   const h = state.hand;
   if (!h) return;
+  const buildLastHandSummary = () => ({
+    hands: {
+      _0: h.hands?.[K(0)] || null,
+      _1: h.hands?.[K(1)] || null,
+    },
+    allTricks: h.allTricks || [],
+    envit: {
+      state: h.envit?.state || "none",
+      acceptedLevel: h.envit?.acceptedLevel || null,
+      caller: h.envit?.caller ?? null,
+      winner: h.envit?.winner ?? null,
+    },
+    truc: {
+      state: h.truc?.state || "none",
+      acceptedLevel: h.truc?.acceptedLevel || null,
+      caller: h.truc?.caller ?? null,
+    },
+    winner: null,
+    mano: h.mano,
+  });
 
   const finish = () => {
     const s0 = getScore(state, 0),
@@ -337,6 +357,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
   // NUEVO: Detectamos si alguien abandonó la mano ("Me'n vaig")
   const isFold = foldedSeat !== undefined && foldedSeat !== null;
   const winnerSeat = isFold ? other(foldedSeat) : null;
+  state.lastHandSummary = buildLastHandSummary();
 
   // --- 1. RESOLVER ENVIT ---
   if (h.envit.state === "accepted") {
@@ -438,6 +459,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
   // --- 2. RESOLVER TRUC Y LA MANO ---
   if (h.truc.state === "accepted") {
     const tw = isFold ? winnerSeat : handWinner(state);
+    if (state.lastHandSummary) state.lastHandSummary.winner = tw;
     const tp = Number(h.truc.acceptedLevel || 0);
     const twName = state.players?.[K(tw)]?.name || `J${tw}`;
     addScore(state, tw, tp);
@@ -452,6 +474,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
     // Ningún truc aceptado, o se va al mazo cuando le acaban de cantar Truc/Retruc
     const hw = isFold ? winnerSeat : handWinner(state);
     if (hw !== null && hw !== undefined) {
+      if (state.lastHandSummary) state.lastHandSummary.winner = hw;
       const hwName = state.players?.[K(hw)]?.name || `J${hw}`;
       // Si se va al mazo, pierde el nivel que ya estuviera asegurado (ej: 1 si es normal, 2 si ya había un truc aceptado de antes).
       const tp = isFold ? Number(h.truc.acceptedLevel || 0) || 1 : 1;

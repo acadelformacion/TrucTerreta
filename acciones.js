@@ -78,6 +78,7 @@ export function defaultState() {
     mano: 0,
     turn: 0,
     hand: null,
+    lastHandSummary: null,
     logs: [],
     winner: null,
     gameEndReason: null,
