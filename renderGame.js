@@ -970,8 +970,16 @@ async function executeBotAction(action, state) {
   }
 }
 
-/** Retard curt: menys solapament amb el refresh dels botons (600 ms). */
-const BOT_ACT_DELAY_MS = 250;
+/** Retard "humà" del bot abans d'actuar (1-5 s). */
+const BOT_ACT_DELAY_MIN_MS = 1000;
+const BOT_ACT_DELAY_MAX_MS = 5000;
+
+function getBotActDelayMs() {
+  return Math.floor(
+    BOT_ACT_DELAY_MIN_MS +
+      Math.random() * (BOT_ACT_DELAY_MAX_MS - BOT_ACT_DELAY_MIN_MS + 1),
+  );
+}
 
 function scheduleBotIfNeededFromGameState(state) {
   if (!isBotActive() || _botThinking) return;
@@ -985,6 +993,7 @@ function scheduleBotIfNeededFromGameState(state) {
     return;
 
   _botThinking = true;
+  const botDelayMs = getBotActDelayMs();
   setTimeout(() => {
     let st = _lastRoom?.state;
     if (
@@ -1017,7 +1026,7 @@ function scheduleBotIfNeededFromGameState(state) {
       .finally(() => {
         _botThinking = false;
       });
-  }, BOT_ACT_DELAY_MS);
+  }, botDelayMs);
 }
 
 // --- Timer de turno del rival ------------------------------------------------
