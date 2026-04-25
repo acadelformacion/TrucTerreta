@@ -1559,10 +1559,14 @@ export function renderAll(room) {
       const p1ready = !!state.ready?.[K(1)];
       const myReady = session.mySeat === 0 ? p0ready : p1ready;
       const bothFirebaseReady = p0ready && p1ready;
+      const isBotMatch = isBotActive();
+      const canStartMatch = isBotMatch ? bothJoined : bothFirebaseReady;
 
       if (!bothJoined) {
         $("waitingStatus").innerHTML =
           'Esperant el segon jugador<span class="dots"></span>';
+      } else if (isBotMatch) {
+        $("waitingStatus").textContent = "Rival preparat! Pots iniciar la partida.";
       } else if (!bothFirebaseReady) {
         $("waitingStatus").innerHTML =
           'Cal que els dos confirmeu \u00abpreparat\u00bb<span class="dots"></span>';
@@ -1576,17 +1580,25 @@ export function renderAll(room) {
       if (session.mySeat === 0) {
         $("startBtn").classList.toggle("hidden", !bothJoined);
         const sB = $("startBtn");
-        sB.disabled = !bothFirebaseReady;
-        sB.title = !bothFirebaseReady ? "Cal que els dos jugadors estiguen preparats" : "";
-        sB.style.opacity = !bothFirebaseReady ? "0.5" : "1";
-        sB.style.cursor = !bothFirebaseReady ? "not-allowed" : "pointer";
-        $("hostReadyBtn").classList.toggle("hidden", !bothJoined || p0ready);
+        sB.disabled = !canStartMatch;
+        sB.title = !canStartMatch
+          ? "Cal que els dos jugadors estiguen preparats"
+          : "";
+        sB.style.opacity = !canStartMatch ? "0.5" : "1";
+        sB.style.cursor = !canStartMatch ? "not-allowed" : "pointer";
+        $("hostReadyBtn").classList.toggle(
+          "hidden",
+          isBotMatch || !bothJoined || p0ready,
+        );
         $("guestReadyBtn").classList.add("hidden");
         $("guestWaitMsg").classList.add("hidden");
       } else {
         $("startBtn").classList.add("hidden");
         $("hostReadyBtn").classList.add("hidden");
-        $("guestReadyBtn").classList.toggle("hidden", !bothJoined || myReady);
+        $("guestReadyBtn").classList.toggle(
+          "hidden",
+          isBotMatch || !bothJoined || myReady,
+        );
         const gW = $("guestWaitMsg");
         gW.classList.toggle("hidden", !bothJoined || !myReady);
         if (myReady) {
