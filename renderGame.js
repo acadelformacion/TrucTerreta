@@ -28,6 +28,10 @@ import {
   stopTurnTimer,
   playGameOverPresentation,
   stopConfetti,
+  animateRivalPlay,
+  animateScreenShake,
+  animateTrickCollect,
+  setupHoverDynamics
 } from "./animations.js";
 import { syncOfferBubblesFromState, showBubble } from "./chat.js";
 import {
@@ -105,6 +109,8 @@ let _openingAnimDoneKey = "";
 let _openingAnimRunning = false;
 let _lastIncomingOfferVibrationKey = "";
 let _botThinking = false;
+let _prevRivalPlayedCount = 0;
+let _prevPendingOfferStr = "";
 
 // Cuenta atrás entre manos
 let betweenTimer = null;
@@ -179,7 +185,8 @@ function bindMyCardPlayable(wrap, cel, card, myCardsZone) {
       myCardsZone.querySelectorAll(".my-card-wrap").forEach((w) =>
         w.classList.remove("playable"),
       );
-      sndCard();
+      const randomSoundIndex = Math.floor(Math.random() * 15);
+      sndCard(randomSoundIndex);
       animatePlay(cel, buildCard(card), () => playCard(card));
     },
     { once: true },
@@ -380,6 +387,10 @@ function startGameEndHandSummary(state, animKey) {
     cdEl.classList.add("hidden");
     cdEl.innerHTML = "";
   }
+  const lastTricks = state.lastAllTricks || [];
+  const lastWinner = lastTricks.length > 0 ? lastTricks[lastTricks.length - 1].w : 0;
+  animateTrickCollect(lastWinner);
+
   const duration = 4000 + (handSummaryHasEnvit(state) ? 1000 : 0);
   gameEndSummaryTimer = setTimeout(() => {
     stopGameEndSummary();
@@ -393,8 +404,15 @@ function startGameEndHandSummary(state, animKey) {
   }, duration);
 }
 
-function startBetween(summaryHtml, extraDelay = 0) {
+function startBetween(summaryHtml, extraDelay = 0, state = null) {
   stopBetween();
+  
+  if (state) {
+    const lastTricks = state.lastAllTricks || [];
+    const lastWinner = lastTricks.length > 0 ? lastTricks[lastTricks.length - 1].w : 0;
+    animateTrickCollect(lastWinner);
+  }
+
   const ov = $("countdownOverlay"),
     lbl = $("countdownLabel");
   if (lbl && summaryHtml) lbl.innerHTML = summaryHtml;
@@ -534,6 +552,7 @@ function renderMyCards(state) {
       wrap.appendChild(cel);
       if (canPlay) bindMyCardPlayable(wrap, cel, card, z);
     }
+    setupHoverDynamics(wrap);
     z.appendChild(wrap);
   });
 
@@ -602,7 +621,7 @@ function renderMyCards(state) {
 }
 
 // --- Grid de bazas ------------------------------------------------------------
-function _renderTrickGrid(allTricks, curP0, curP1) {
+function _renderTrickGrid(allTricks, curP0, curP1, didRivalJustPlay = false) {
   const grid = $("trickGrid");
   if (!grid) return;
   grid.replaceChildren();
@@ -654,8 +673,12 @@ function _renderTrickGrid(allTricks, curP0, curP1) {
     const rivalCard = rival === 0 ? curP0 : curP1;
     if (rivalCard) {
       const el = buildCard(rivalCard);
-      el.classList.add("land-anim");
       cellRival.appendChild(el);
+      if (didRivalJustPlay) {
+        animateRivalPlay(el);
+      } else {
+        el.classList.add("land-anim");
+      }
     }
 
     const sep = document.createElement("div");
@@ -706,6 +729,17 @@ function renderTrick(state) {
   const allT = h.allTricks || [];
   const p0 = getPlayed(h, 0),
     p1 = getPlayed(h, 1);
+    
+  const rivalSeat = other(session.mySeat);
+  const rivalP = rivalSeat === 0 ? p0 : p1;
+  let didRivalJustPlay = false;
+  const rivalPlayedCount = allT.length + (rivalP ? 1 : 0);
+  if (rivalPlayedCount > _prevRivalPlayedCount) {
+    sndCard(Math.floor(Math.random() * 15));
+    didRivalJustPlay = true;
+  }
+  _prevRivalPlayedCount = rivalPlayedCount;
+
   const offerTag = h.pendingOffer
     ? `${h.pendingOffer.kind}:${h.pendingOffer.level}`
     : "";
@@ -724,7 +758,7 @@ function renderTrick(state) {
 
   if (trickKey !== _prevTrickKey) {
     _prevTrickKey = trickKey;
-    _renderTrickGrid(allT, p0, p1);
+    _renderTrickGrid(allT, p0, p1, didRivalJustPlay);
   }
 
   if (info) {
@@ -784,6 +818,13 @@ function renderActions(state) {
     norm = h.mode === "normal",
     envDone = h.envit.state !== "none";
   const played = alreadyPlayed(h, session.mySeat);
+  const curOfferStr = h.pendingOffer ? `${h.pendingOffer.kind}:${h.pendingOffer.level}` : "";
+  if (curOfferStr && curOfferStr !== _prevPendingOfferStr) {
+    const isHighAlert = (h.pendingOffer.kind === "truc" && Number(h.pendingOffer.level) === 4) || (h.pendingOffer.kind === "envit" && h.pendingOffer.level === "falta");
+    if (isHighAlert) animateScreenShake();
+  }
+  _prevPendingOfferStr = curOfferStr;
+
   const tricksDone = (h.trickHistory || []).length;
   const noTricksPlayed = tricksDone === 0;
   const iHaventPlayed = !alreadyPlayed(h, session.mySeat);
@@ -1612,7 +1653,7 @@ export function renderAll(room) {
     } else {
       $("waitingOverlay").classList.add("hidden");
       if (bothJoined && betweenTimer === null && !_betweenCountdownLatch)
-        startBetween(buildScoreSummary(state), handSummaryHasEnvit(state) ? 1000 : 0);
+        startBetween(buildScoreSummary(state), handSummaryHasEnvit(state) ? 1000 : 0, state);
     }
     _prevStatus = state.status;
     // Detectar fin de mano y actualizar memoria del bot
@@ -1663,3 +1704,6 @@ export function renderAll(room) {
   }
   scheduleBotIfNeededFromGameState(state);
 }
+
+// --- Inicialitzaci� d'efectes ------------------------------------------------
+setupHoverDynamics(document.getElementById("deckPile"));

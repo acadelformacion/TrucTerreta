@@ -171,7 +171,7 @@ body {
   letter-spacing: 0.3px;
 }
 
-/* Peu fix (copyright + versió), fora del requadre d’auth; només pantalla d’inici de sessió */
+/* Peu fix (copyright + versió), visible fora de la mesa de joc */
 .auth-page-footer {
   position: fixed;
   left: 0;
@@ -183,10 +183,6 @@ body {
   max-width: min(100%, 32rem);
   margin: 0 auto;
   pointer-events: none;
-}
-
-#screenLobby:has(#pantalla-lobby:not(.hidden)) .auth-page-footer {
-  display: none !important;
 }
 
 .auth-footer-row {
@@ -1261,7 +1257,7 @@ body {
   width: 52px;
   height: 75px;
   z-index: 5;
-  pointer-events: none;
+  pointer-events: auto;
 }
 #deckPile .card-back {
   position: absolute;
@@ -3347,6 +3343,7 @@ body {
 
 @media (min-width: 1024px) {
   .playing-card,
+  .card-back.card-back-hand,
   .trick-cell-rival,
   .trick-cell-mine {
     width: 90px;

@@ -315,6 +315,26 @@ function fullHandForSeat(h, seat) {
   return played ? [...base, played] : [...base];
 }
 
+/**
+ * Guanyador de l'envit acceptat des del que es va guardar a Firebase.
+ * Si falta `winner` (p. ex. 0 perdut a RTDB) o les mans ja estan buides,
+ * s'usen `envitV0` / `envitV1` guardats en acceptar.
+ */
+function resolvedEnvitWinnerSeat(envit, mano) {
+  if (!envit || envit.state !== "accepted") return null;
+  const raw = envit.winner;
+  if (raw === 0 || raw === 1) return raw;
+  if (raw === "0" || raw === "1") return Number(raw);
+  const ev0 = envit.envitV0,
+    ev1 = envit.envitV1;
+  if (Number.isFinite(Number(ev0)) && Number.isFinite(Number(ev1))) {
+    const v0 = Number(ev0),
+      v1 = Number(ev1);
+    return v0 > v1 ? 0 : v1 > v0 ? 1 : mano;
+  }
+  return null;
+}
+
 export function applyHandEnd(state, reason, foldedSeat) {
   const h = state.hand;
   if (!h) return;
@@ -328,7 +348,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
       state: h.envit?.state || "none",
       acceptedLevel: h.envit?.acceptedLevel || null,
       caller: h.envit?.caller ?? null,
-      winner: h.envit?.winner ?? null,
+      winner: resolvedEnvitWinnerSeat(h.envit, state.mano),
     },
     truc: {
       state: h.truc?.state || "none",
@@ -361,10 +381,10 @@ export function applyHandEnd(state, reason, foldedSeat) {
 
   // --- 1. RESOLVER ENVIT ---
   if (h.envit.state === "accepted") {
-    let ew = isFold ? winnerSeat : (h.envit.winner ?? null); // ← usar winner guardado
+    let ew = isFold ? winnerSeat : resolvedEnvitWinnerSeat(h.envit, state.mano);
     let envitPerMa = !isFold && (h.envit.perMa === true);
     if (ew === null) {
-      // Fallback por si winner no está (partidas antiguas)
+      // Últim recurs: mans residuals (sense fiabilitat si ja estan buides → 0-0 i mano)
       const v0 = bestEnvit(fromHObj(h.hands?.[K(0)]));
       const v1 = bestEnvit(fromHObj(h.hands?.[K(1)]));
       envitPerMa = !isFold && (v0 === v1);

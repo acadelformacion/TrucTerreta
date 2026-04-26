@@ -24,10 +24,32 @@ export function tone(f, t, d, v, dl) {
   } catch (e) {}
 }
 
-export const sndCard = () => {
+const cardAudioFiles = [
+  "colocar-carta-1", "colocar-carta-2", "colocar-carta-3", "colocar-carta-4",
+  "deslizar-carta-1", "deslizar-carta-2", "deslizar-carta-3", "deslizar-carta-4",
+  "deslizar-carta-5", "deslizar-carta-6", "deslizar-carta-7", "deslizar-carta-8",
+  "deslizar-carta-9", "deslizar-carta-10", "deslizar-carta-11"
+];
+let cardHowls = [];
+
+export const sndCard = (index) => {
   if (!isSoundEnabled()) return;
-  tone(440, "triangle", 0.07, 0.14);
-  tone(560, "triangle", 0.05, 0.09, 0.06);
+  
+  if (cardHowls.length === 0 && typeof Howl !== 'undefined') {
+    cardHowls = cardAudioFiles.map(name => new Howl({
+      src: [`Media/Audio/${name}.ogg`, `Media/Audio/${name}.mp3`]
+    }));
+  }
+
+  if (cardHowls.length > 0) {
+    const i = typeof index === 'number' && index >= 0 && index < cardHowls.length 
+      ? index 
+      : Math.floor(Math.random() * cardHowls.length);
+    cardHowls[i].play();
+  } else {
+    tone(440, "triangle", 0.07, 0.14);
+    tone(560, "triangle", 0.05, 0.09, 0.06);
+  }
 };
 export const sndWin = () => {
   if (!isSoundEnabled()) return;

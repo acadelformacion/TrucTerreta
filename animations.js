@@ -329,32 +329,156 @@ export function animatePlay(cardEl, flyEl, onDone) {
   const fr = cardEl.getBoundingClientRect();
   const to = slot
     ? slot.getBoundingClientRect()
-    : {
-        left: window.innerWidth / 2,
-        top: window.innerHeight / 2,
-        width: 80,
-        height: 114,
-      };
-  flyEl.classList.add("card-flying");
+    : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 80, height: 114 };
+      
   flyEl.style.cssText = `left:${fr.left}px;top:${fr.top}px;width:${fr.width}px;height:${fr.height}px;position:fixed;pointer-events:none;z-index:200;`;
-  flyEl.style.setProperty(
-    "--tx",
-    to.left + to.width / 2 - fr.left - fr.width / 2 + "px",
-  );
-  flyEl.style.setProperty(
-    "--ty",
-    to.top + to.height / 2 - fr.top - fr.height / 2 + "px",
-  );
-  flyEl.style.setProperty("--rot", Math.random() * 10 - 5 + "deg");
   document.body.appendChild(flyEl);
-  flyEl.addEventListener(
-    "animationend",
-    () => {
+
+  const g = globalThis.gsap;
+  if (g) {
+    const dx = to.left + to.width / 2 - (fr.left + fr.width / 2);
+    const dy = to.top + to.height / 2 - (fr.top + fr.height / 2);
+    const rot = Math.random() * 14 - 7;
+    
+    g.to(flyEl, {
+      x: dx,
+      y: dy,
+      rotation: rot,
+      scale: 0.72,
+      duration: 0.45,
+      ease: "back.out(1.2)",
+      onComplete: () => {
+        flyEl.remove();
+        if (onDone) onDone();
+      }
+    });
+  } else {
+    flyEl.classList.add("card-flying");
+    flyEl.style.setProperty("--tx", to.left + to.width / 2 - fr.left - fr.width / 2 + "px");
+    flyEl.style.setProperty("--ty", to.top + to.height / 2 - fr.top - fr.height / 2 + "px");
+    flyEl.style.setProperty("--rot", Math.random() * 10 - 5 + "deg");
+    flyEl.addEventListener("animationend", () => { flyEl.remove(); if (onDone) onDone(); }, { once: true });
+  }
+}
+
+export function animateRivalPlay(el) {
+  const g = globalThis.gsap;
+  if (!g) {
+    el.classList.add("land-anim");
+    return;
+  }
+  const sourceNode = document.getElementById("rivalAv") || document.getElementById("rivalCards");
+  if (!sourceNode) {
+    g.from(el, { scale: 0.5, y: -50, opacity: 0, duration: 0.4, ease: "back.out(1.2)" });
+    return;
+  }
+  
+  // Ocultar la carta real temporalmente
+  el.style.opacity = "0";
+
+  const fr = sourceNode.getBoundingClientRect();
+  const to = el.getBoundingClientRect();
+  
+  // Crear un clon para volar
+  const flyEl = el.cloneNode(true);
+  flyEl.style.cssText = `left:${to.left}px;top:${to.top}px;width:${to.width}px;height:${to.height}px;position:fixed;pointer-events:none;z-index:200;transition:none;opacity:1;`;
+  document.body.appendChild(flyEl);
+
+  const dx = fr.left + fr.width / 2 - (to.left + to.width / 2);
+  const dy = fr.top + fr.height / 2 - (to.top + to.height / 2);
+  
+  g.from(flyEl, {
+    x: dx,
+    y: dy,
+    rotation: Math.random() * 20 - 10,
+    scale: 1.2,
+    opacity: 0,
+    duration: 0.45,
+    ease: "back.out(1.2)",
+    onComplete: () => {
       flyEl.remove();
-      if (onDone) onDone();
-    },
-    { once: true },
+      el.style.removeProperty("opacity");
+    }
+  });
+}
+
+export function animateScreenShake() {
+  const g = globalThis.gsap;
+  const table = document.getElementById("table");
+  if (!g || !table) return;
+  g.killTweensOf(table);
+  g.fromTo(table,
+    { x: -3, y: 2, rotation: -0.2 },
+    { x: 3, y: -2, rotation: 0.2, yoyo: true, repeat: 5, duration: 0.06, clearProps: "all", ease: "none" }
   );
+}
+
+export function animateTrickCollect(winnerSeat) {
+  const g = globalThis.gsap;
+  if (!g) return;
+  const cols = document.querySelectorAll(".trick-col");
+  if (!cols.length) return;
+  
+  const targetId = winnerSeat === 0 ? "myAvatarContainer" : "rivalAvatarContainer";
+  const target = document.getElementById(targetId);
+  const tx = target ? target.getBoundingClientRect().left + target.getBoundingClientRect().width / 2 : window.innerWidth / 2;
+  const ty = target ? target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2 : window.innerHeight / 2;
+
+  g.to(cols, {
+    x: (i, el) => tx - (el.getBoundingClientRect().left + el.getBoundingClientRect().width / 2),
+    y: (i, el) => ty - (el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2),
+    scale: 0.1,
+    opacity: 0,
+    rotation: "random(-180, 180)",
+    duration: 0.65,
+    stagger: 0.08,
+    ease: "power2.in"
+  });
+}
+
+export function setupHoverDynamics(el) {
+  if (!el || !globalThis.gsap) return;
+  const g = globalThis.gsap;
+  const onMove = (e) => {
+    // Para táctil, toma el primer toque
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = el.getBoundingClientRect();
+    const x = clientX - rect.left - rect.width / 2;
+    const y = clientY - rect.top - rect.height / 2;
+    
+    // Calcula la inclinación/movimiento (parallax)
+    // Reducimos el factor para que sea suave
+    const moveX = x * 0.15;
+    const moveY = y * 0.15;
+    const rot = x * 0.03;
+    
+    g.to(el, {
+      x: moveX,
+      y: moveY,
+      rotation: rot,
+      duration: 0.4,
+      ease: "power2.out",
+      overwrite: "auto"
+    });
+  };
+  
+  const onLeave = () => {
+    g.to(el, {
+      x: 0,
+      y: 0,
+      rotation: 0,
+      duration: 0.7,
+      ease: "elastic.out(1, 0.4)",
+      overwrite: "auto"
+    });
+  };
+
+  el.addEventListener("mousemove", onMove);
+  el.addEventListener("mouseleave", onLeave);
+  el.addEventListener("touchmove", onMove, { passive: true });
+  el.addEventListener("touchend", onLeave);
+  el.addEventListener("touchcancel", onLeave);
 }
 
 function revealDealWrapsIfAborted(wraps) {
@@ -473,17 +597,36 @@ export function animateMyHandDealFromDeck(wraps, options = {}) {
       });
       tl.add(one, i * stagger);
     });
+    const getFinalRot = (i, total) => total === 3 ? (i === 0 ? -8 : i === 1 ? 0 : 8) : (total === 2 ? (i === 0 ? -5 : 5) : 0);
+    const getFinalY = (i, total) => total === 3 ? (i === 0 ? 6 : i === 1 ? 0 : 6) : (total === 2 ? 4 : 0);
+
+    // Primero colocamos todas las cartas en su abanico final para que el giro
+    // no muestre un orden temporal que cambie milisegundos después.
+    tl.to(
+      list,
+      {
+        x: 0,
+        y: (i) => getFinalY(i, list.length),
+        rotation: (i) => getFinalRot(i, list.length),
+        duration: 0.18,
+        ease: "power2.out",
+        stagger: 0.04,
+      },
+      ">",
+    );
     const flipAll = flipAllSubtimeline(list);
     if (flipAll) {
       tl.add(flipAll, ">");
     }
   } else {
+    const getFinalRot = (i, total) => total === 3 ? (i === 0 ? -8 : i === 1 ? 0 : 8) : (total === 2 ? (i === 0 ? -5 : 5) : 0);
+    const getFinalY = (i, total) => total === 3 ? (i === 0 ? 6 : i === 1 ? 0 : 6) : (total === 2 ? 4 : 0);
     const dur = 0.38;
     const ease = "power2.out";
     list.forEach((el, i) => {
       tl.to(
         el,
-        { x: 0, y: 0, rotation: 0, duration: dur, ease },
+        { x: 0, y: getFinalY(i, list.length), rotation: getFinalRot(i, list.length), duration: dur, ease },
         i === 0 ? 0 : ">",
       );
       const flipSub = flipSubtimeline?.(el, i);

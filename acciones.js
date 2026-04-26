@@ -482,6 +482,8 @@ export async function respondEnvit(choice) {
         acceptedLevel: offer.level,
         acceptedBy: session.mySeat,
         winner: envitWinner,
+        envitV0: v0,
+        envitV1: v1,
         perMa,
         proof: proof.cards?.length > 0
           ? { points: proof.points, cards: proof.cards }
@@ -581,6 +583,8 @@ export async function respondEnvitAsBot(choice) {
         acceptedLevel: offer.level,
         acceptedBy: botSeat,
         winner: envitWinner,
+        envitV0: v0,
+        envitV1: v1,
         perMa,
         proof:
           proof.cards?.length > 0

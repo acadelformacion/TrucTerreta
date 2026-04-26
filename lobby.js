@@ -45,8 +45,8 @@ export function configureLobby({ startSession }) {
 function authPlayerExtras() {
   const u = auth.currentUser;
   if (!u) return {};
-  if (u.isAnonymous) return { guest: true };
-  const o = {};
+  const o = { uid: u.uid };
+  if (u.isAnonymous) o.guest = true;
   if (u.photoURL) o.photoURL = u.photoURL;
   return o;
 }
@@ -112,6 +112,9 @@ let _pendingRoomSettings = DEFAULT_ROOM_SETTINGS();
 let _lastRoomListKey = null;
 let unsubRooms = null;
 const ORPHAN_ROOM_MAX_MS = 2 * 60 * 1000;
+/** Timestamp de l'última sala creada (rate-limit client-side). */
+let _lastRoomCreatedAt = 0;
+const ROOM_CREATE_RATE_MS = 5_000;
 
 // --- Missatge de lobby -------------------------------------------------------
 export function setLobbyMsg(txt, cls) {
@@ -128,9 +131,39 @@ function saveLS(n, c, s) {
 }
 
 // --- Crear sala --------------------------------------------------------------
+/** Comprova si l'usuari autenticat ja té una sala activa com a amfitrió (J0). */
+async function hasActiveRoomAsHost() {
+  const u = auth.currentUser;
+  if (!u) return false;
+  const snap = await get(ref(db, "rooms"));
+  if (!snap.exists()) return false;
+  let found = false;
+  snap.forEach((child) => {
+    const data = child.val();
+    if (data?.state?.players?.[K(0)]?.uid !== u.uid) return;
+    const finalizada = data.state.status === "game_over";
+    const inactiva = Date.now() - (data.lastActivity || 0) > 3 * 60 * 1000;
+    if (!finalizada && !inactiva) found = true;
+  });
+  return found;
+}
+
 export async function createRoom() {
   setBotActive(false);
   resetBotMemory();
+  // Barrera 1: Rate-limit — mínim 15 s entre creacions
+  if (Date.now() - _lastRoomCreatedAt < ROOM_CREATE_RATE_MS) {
+    setLobbyMsg("Espera uns segons abans de crear una nova sala.", "err");
+    return false;
+  }
+  // Barrera 2: Sala activa — un usuari, una sala
+  if (auth.currentUser) {
+    if (await hasActiveRoomAsHost()) {
+      _pendingCreateVisibility = "public";
+      setLobbyMsg("Ja tens una sala activa. Tanca-la primer.", "err");
+      return false;
+    }
+  }
   const vis = _pendingCreateVisibility === "private" ? "private" : "public";
   const name = normName($("nameInput")?.value);
   const code =
@@ -155,6 +188,7 @@ export async function createRoom() {
       return false;
     }
   }
+  _lastRoomCreatedAt = Date.now();
   const settings = { ..._pendingRoomSettings };
   const init = defaultState();
   init.roomCode = code;
@@ -181,6 +215,11 @@ export async function createRoom() {
 }
 
 export async function createRoomAsBot(name) {
+  // Barrera 1: Rate-limit — mínim 15 s entre creacions
+  if (Date.now() - _lastRoomCreatedAt < ROOM_CREATE_RATE_MS) {
+    setLobbyMsg("Espera uns segons abans de crear una nova sala.", "err");
+    return false;
+  }
   const vis = "private";
   const botName = "🤖 Bot";
   const humanName = normName(name);
@@ -205,6 +244,7 @@ export async function createRoomAsBot(name) {
       return false;
     }
   }
+  _lastRoomCreatedAt = Date.now();
 
   const settings = { ..._pendingRoomSettings };
   const init = defaultState();
@@ -221,6 +261,7 @@ export async function createRoomAsBot(name) {
     guest: true,
   };
   init.ready = init.ready || {};
+  init.ready[K(0)] = true;
   init.ready[K(1)] = true;
   init.logs = [{ text: `Sala creada per ${humanName}.`, at: Date.now() }];
 
@@ -441,7 +482,7 @@ export async function limpiarSalasAntiguas() {
       const data = child.val();
       const st = data.state;
       const la = data.lastActivity || 0;
-      const inactiva = ahora - la > 30 * 60 * 1000;
+      const inactiva = ahora - la > 3 * 60 * 1000;
       const finalizada = st?.status === "game_over";
       const preGameLobby =
         st?.status === "waiting" && real(st?.handNumber ?? OFFSET) === 0;
