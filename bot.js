@@ -1,5 +1,6 @@
 import { session } from './firebase.js';
 import { isSoundEnabled } from './config.js';
+import { mustPlayCardOnlyThisTrick } from './logica.js';
 
 // ── CONSTANTES ────────────────────────────────────────────────
 const BOT_SEAT = 1;
@@ -516,16 +517,6 @@ function decideAction(state, myCards, qvals, legal) {
     const ap = acceptTrucProb(myCards, trucLevel, humanScore);
     const hasBest = myCards.includes('1_espadas') || myCards.includes('1_bastos');
 
-    // ── Cruce de apuestas: Responder al Truc con Envit ──
-    if (legal.includes(3) && h.envitAvailable && h.envit?.state === 'none') {
-      if (envPts >= 29 && roll(65)) {
-        if (legal.includes(4) && envPts >= 32 && roll(50)) return 4; // falta
-        return 3; // envit
-      } else if (envPts <= 7 && roll(10)) {
-        return 3; // Farol defensivo
-      }
-    }
-
     if (trucLevel === 2 && roll(rp)) {
       if (hasBest || mp >= 11) _botWasBluffingTruc = false;
       else _botWasBluffingTruc = true;
@@ -670,7 +661,8 @@ function buildActionMask(state, seat) {
   if (mode === 'normal' && !po) {
     if (!alreadyPlayed) {
       for (let i = 0; i < nc; i++) mask[i] = 1.0;
-      if (h.envitAvailable && h.envit?.state === 'none') {
+      const noOffersMatada = mustPlayCardOnlyThisTrick(h, seat);
+      if (!noOffersMatada && h.envitAvailable && h.envit?.state === 'none') {
         mask[3] = 1.0; mask[4] = 1.0;
       }
       const tr = h.truc;
@@ -679,7 +671,7 @@ function buildActionMask(state, seat) {
         if (tr.responder !== seat) canTruc = false;
         else if (Number(tr.acceptedLevel||2)+1 > 4) canTruc = false;
       } else if (tr?.state !== 'none') canTruc = false;
-      if (canTruc && nc > 0) mask[5] = 1.0;
+      if (!noOffersMatada && canTruc && nc > 0) mask[5] = 1.0;
     }
   } else if (mode === 'respond_envit' && po?.kind === 'envit') {
     mask[6] = 1.0; mask[7] = 1.0;
@@ -689,9 +681,6 @@ function buildActionMask(state, seat) {
     mask[10] = 1.0; mask[11] = 1.0;
     if (po.level === 2) mask[12] = 1.0;
     if (po.level === 3) mask[13] = 1.0;
-    if (h.envitAvailable && h.envit?.state === 'none') {
-      mask[3] = 1.0; mask[4] = 1.0;
-    }
   }
   return mask;
 }

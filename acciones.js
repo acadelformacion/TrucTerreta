@@ -291,19 +291,17 @@ export async function startOffer(kind) {
     if (!h || state.status !== "playing" || h.status !== "in_progress")
       return false;
     if (h.turn !== session.mySeat) return false;
+    if (Logica.mustPlayCardOnlyThisTrick(h, session.mySeat)) return false;
 
-    // Nueva lógica para Envit o Falta (incluso cruzándolos sobre un Truc)
     if (kind === "envit" || kind === "falta") {
-      if (!(h.mode === "normal" || h.mode === "respond_truc")) return false;
+      if (h.mode !== "normal") return false;
       if (!h.envitAvailable || h.envit.state !== "none") return false;
       const tricksDone = (h.trickHistory || []).length;
       if (tricksDone !== 0) return false;
       if (alreadyPlayed(h, session.mySeat)) return false;
-      if (h.mode === "normal") {
-        const noTrucAtAll =
-          h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
-        if (!noTrucAtAll) return false;
-      }
+      const noTrucAtAll =
+        h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
+      if (!noTrucAtAll) return false;
 
       const level = kind === "falta" ? "falta" : 2;
 
@@ -351,7 +349,7 @@ export async function startOffer(kind) {
       };
       h.mode = "respond_truc";
       h.turn = other(session.mySeat);
-      h.envitAvailable = true;
+      h.envitAvailable = false;
 
       const nom =
         state.players?.[K(session.mySeat)]?.name || `J${session.mySeat}`;
@@ -370,18 +368,17 @@ export async function startOfferAsBot(kind) {
     if (!h || state.status !== "playing" || h.status !== "in_progress")
       return false;
     if (h.turn !== botSeat) return false;
+    if (Logica.mustPlayCardOnlyThisTrick(h, botSeat)) return false;
 
     if (kind === "envit" || kind === "falta") {
-      if (!(h.mode === "normal" || h.mode === "respond_truc")) return false;
+      if (h.mode !== "normal") return false;
       if (!h.envitAvailable || h.envit.state !== "none") return false;
       const tricksDone = (h.trickHistory || []).length;
       if (tricksDone !== 0) return false;
       if (alreadyPlayed(h, botSeat)) return false;
-      if (h.mode === "normal") {
-        const noTrucAtAll =
-          h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
-        if (!noTrucAtAll) return false;
-      }
+      const noTrucAtAll =
+        h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
+      if (!noTrucAtAll) return false;
 
       const level = kind === "falta" ? "falta" : 2;
       h.resume = {
@@ -426,7 +423,7 @@ export async function startOfferAsBot(kind) {
       };
       h.mode = "respond_truc";
       h.turn = other(botSeat);
-      h.envitAvailable = true;
+      h.envitAvailable = false;
 
       const nom = state.players?.[K(botSeat)]?.name || `J${botSeat}`;
       pushLog(state, `${nom} canta truc.`);
@@ -690,7 +687,7 @@ export async function respondTruc(choice) {
       h.pendingOffer = { kind: "truc", level: 3, by: resp, to: caller };
       h.turn = caller;
       h.mode = "respond_truc";
-      h.envitAvailable = true;
+      h.envitAvailable = false;
       pushLog(state, "Retruque a 3.");
       return true;
     }
@@ -699,7 +696,7 @@ export async function respondTruc(choice) {
       h.pendingOffer = { kind: "truc", level: 4, by: resp, to: caller };
       h.turn = caller;
       h.mode = "respond_truc";
-      h.envitAvailable = true;
+      h.envitAvailable = false;
       pushLog(state, "Val 4 al truc.");
       return true;
     }
@@ -756,7 +753,7 @@ export async function respondTrucAsBot(choice) {
       h.pendingOffer = { kind: "truc", level: 3, by: resp, to: caller };
       h.turn = caller;
       h.mode = "respond_truc";
-      h.envitAvailable = true;
+      h.envitAvailable = false;
       pushLog(state, "Retruque a 3.");
       return true;
     }
@@ -765,7 +762,7 @@ export async function respondTrucAsBot(choice) {
       h.pendingOffer = { kind: "truc", level: 4, by: resp, to: caller };
       h.turn = caller;
       h.mode = "respond_truc";
-      h.envitAvailable = true;
+      h.envitAvailable = false;
       pushLog(state, "Val 4 al truc.");
       return true;
     }

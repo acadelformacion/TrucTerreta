@@ -273,6 +273,30 @@ export function makeHand(mano) {
   };
 }
 
+/**
+ * Qui ha matat la baza (guanya jugant segon) obri la següent: només pot tirar carta,
+ * sense truc, retruc, envit ni falta fins haver-la jugat.
+ */
+export function mustPlayCardOnlyThisTrick(h, seat) {
+  if (!h || h.mode !== "normal" || h.pendingOffer) return false;
+  const hist = h.trickHistory || [];
+  const tricksDone = hist.length;
+  if (tricksDone === 0) return false;
+  const lastTrick = hist[tricksDone - 1];
+  if (
+    !lastTrick ||
+    lastTrick.winner === 99 ||
+    lastTrick.winner === null ||
+    lastTrick.winner === undefined
+  )
+    return false;
+  if (lastTrick.winner !== seat) return false;
+  if (lastTrick.winner === lastTrick.lead) return false;
+  if (h.trickLead !== seat) return false;
+  if (getPlayed(h, seat)) return false;
+  return true;
+}
+
 // --- Game logic ---------------------------------------------------------------
 export function handWinner(state) {
   const h = state.hand;

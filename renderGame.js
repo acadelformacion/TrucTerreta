@@ -937,12 +937,13 @@ function renderActions(state) {
   const noTrucAtAll =
     h.truc.state === "none" && !(h.pendingOffer?.kind === "truc");
 
-  const envitAvailNow =
-    h.envitAvailable && noTricksPlayed && iHaventPlayed && !envDone && noTrucAtAll;
-  const canEnvitInTruc =
-    h.envitAvailable && noTricksPlayed && iHaventPlayed && !envDone &&
-    h.mode === "respond_truc";
-  const envitOk = envitAvailNow || canEnvitInTruc;
+  const envitOk =
+    h.envitAvailable &&
+    noTricksPlayed &&
+    iHaventPlayed &&
+    !envDone &&
+    noTrucAtAll &&
+    norm;
 
   const nadieHaJugado = !alreadyPlayed(h, 0) && !alreadyPlayed(h, 1);
   const sinApuestasPrevias = h.envit.state === "none" && h.truc.state === "none";
@@ -1015,7 +1016,8 @@ function renderActions(state) {
 
     om.classList.remove("hidden");
     ra.classList.remove("hidden");
-    if (h.pendingOffer.kind === "envit") {
+    const pendingKind = h.pendingOffer.kind;
+    if (pendingKind === "envit" && h.mode === "respond_envit") {
       add("Vull", "btn-accept", () => respondEnvit("vull"));
       add("No vull", "btn-reject", () => respondEnvit("no_vull"));
       const lvl = h.pendingOffer.level;
@@ -1025,27 +1027,22 @@ function renderActions(state) {
       } else if (lvl === 4) {
         add("Falta", "btn-envit-3", () => respondEnvit("falta"));
       }
-    } else {
-      if (envitOk) {
-        add("Envidar", "btn-envit-1", () => startOffer("envit"));
-        add("Falta", "btn-envit-3", () => startOffer("falta"));
-      }
+    } else if (pendingKind === "truc" && h.mode === "respond_truc") {
       add("Vull", "btn-accept", () => respondTruc("vull"));
       add("No vull", "btn-reject", () => respondTruc("no_vull"));
       if (h.pendingOffer.level === 2)
         add("Retruque", "btn-truc-2", () => respondTruc("retruque"));
       if (h.pendingOffer.level === 3)
         add("Val 4", "btn-truc-3", () => respondTruc("val4"));
+    } else {
+      ra.classList.add("hidden");
+      om.classList.add("hidden");
     }
   } else if (myT && norm) {
-    const lastTrick = tricksDone > 0 ? h.trickHistory[tricksDone - 1] : null;
-    const winnerWasResponder =
-      lastTrick && lastTrick.winner !== 99 && lastTrick.winner !== lastTrick.lead;
-    const isConsecutivePlay =
-      tricksDone > 0 &&
-      h.trickLead === session.mySeat &&
-      !played &&
-      winnerWasResponder;
+    const isConsecutivePlay = Logica.mustPlayCardOnlyThisTrick(
+      h,
+      session.mySeat,
+    );
 
     if (!isConsecutivePlay) {
       if (envitOk) {
@@ -1089,11 +1086,10 @@ function renderActions(state) {
     } else if (!myT && !played) {
       sm.textContent = `Torn de ${pName(state, h.turn)}`;
     } else if (!played && norm && !h.pendingOffer) {
-      const lastTrick = tricksDone > 0 ? h.trickHistory[tricksDone - 1] : null;
-      const winnerWasResponder =
-        lastTrick && lastTrick.winner !== 99 && lastTrick.winner !== lastTrick.lead;
-      const isConsecutivePlay =
-        tricksDone > 0 && h.trickLead === session.mySeat && winnerWasResponder;
+      const isConsecutivePlay = Logica.mustPlayCardOnlyThisTrick(
+        h,
+        session.mySeat,
+      );
       sm.textContent = isConsecutivePlay
         ? "Tira la teua carta"
         : "El teu torn, tria carta o acci\u00f3";
