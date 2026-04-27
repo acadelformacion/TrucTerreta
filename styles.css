@@ -200,6 +200,7 @@ body {
 .auth-copyright {
   font-size: 11px;
   line-height: 1.45;
+  opacity: 0.6;
   color: rgba(200, 210, 205, 0.55);
   font-weight: 400;
   letter-spacing: 0.02em;
@@ -496,6 +497,7 @@ body {
 }
 .create-room-btn-secondary {
   min-width: 120px;
+  min-height: 44px;
   padding: 10px 18px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -509,11 +511,19 @@ body {
 .create-room-btn-secondary:hover {
   border-color: rgba(255, 255, 255, 0.4);
 }
+.create-room-btn-secondary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .create-room-btn-primary {
   flex: 1 1 180px;
   max-width: 260px;
   padding: 12px 20px !important;
   font-size: 15px !important;
+}
+.create-room-btn-primary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 .create-room-btn-danger {
   flex: 1 1 180px;
@@ -534,6 +544,10 @@ body {
 .create-room-btn-danger:hover {
   border-color: #e98585;
   background: linear-gradient(180deg, #c94444, #a22d2d);
+}
+.create-room-btn-danger:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 .private-code-panel {
   width: min(440px, 100%);
@@ -607,6 +621,7 @@ body {
 .auth-google-wrap #g_id_signin {
   display: flex;
   justify-content: center;
+  transform: scale(1.05);
   border-radius: 14px;
   overflow: hidden;
 }
@@ -656,7 +671,7 @@ body {
 #btn-invitado.auth-btn-guest {
   width: auto;
   max-width: 220px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 18px;
   border-radius: 12px;
   font-size: 13px;
@@ -1026,6 +1041,18 @@ body {
 .lbtn:active {
   transform: translateY(1px);
 }
+
+.lbtn:focus-visible,
+.action-btn:focus-visible,
+#leaveBtn:focus-visible,
+#mazoBtn:focus-visible,
+#envitBtn:focus-visible,
+#trucBtn:focus-visible,
+#faltaBtn:focus-visible {
+  outline: none;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 2px var(--gold);
+}
 .lbtn-primary {
   background: var(--gold);
   color: #0b1512;
@@ -1325,9 +1352,7 @@ body {
 }
 .my-card-wrap {
   position: relative;
-  transition:
-    transform 0.2s ease,
-    z-index 0s;
+  z-index: 1;
   margin: 0 -8px;
 }
 
@@ -1337,7 +1362,6 @@ body {
   }
 }
 .my-card-wrap:hover {
-  transform: translateY(-12px) scale(1.04);
   z-index: 10;
 }
 .my-card-wrap.playable {
@@ -1349,26 +1373,20 @@ body {
     0 10px 30px rgba(0, 0, 0, 0.72),
     0 0 0 1px rgba(255, 214, 90, 0.7),
     0 0 10px rgba(255, 214, 90, 0.22);
-  animation: playableCardNudge 5s ease-in-out infinite;
-  will-change: transform, box-shadow;
 }
 .my-card-wrap.playable:hover .playing-card {
-  animation-play-state: paused;
   border-color: var(--gold);
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.8),
     0 0 0 2px var(--gold);
-  transform: translateY(-6px);
 }
-@keyframes playableCardNudge {
-  0%,
-  92%,
-  100% {
-    transform: translateY(0);
-  }
-  96% {
-    transform: translateY(-2px);
-  }
+
+.card-gsap-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
 }
 
 /* Cartes (playing-card) */
@@ -2286,9 +2304,22 @@ body {
   flex-shrink: 0;
 }
 #waitingOverlay .waiting-head-block .ov-title {
-  font-size: clamp(11px, 2.4vmin, 14px);
+  font-size: clamp(18px, 3.6vmin, 28px);
+  font-weight: 800;
   letter-spacing: clamp(1px, 0.35vmin, 2px);
   line-height: 1.2;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.6),
+    0 0 14px rgba(212, 175, 55, 0.28);
+}
+#waitingOverlay .waiting-mode-pts-line {
+  justify-content: center;
+  margin-top: clamp(3px, 0.8vmin, 8px);
+  margin-bottom: clamp(2px, 0.7vmin, 6px);
+  font-size: clamp(12px, 2.5vmin, 14px);
+}
+#waitingOverlay .waiting-mode-pts-line .rl-tag {
+  font-size: clamp(10px, 2.1vmin, 12px);
 }
 
 .waiting-faceoff {
@@ -2328,6 +2359,10 @@ body {
   padding: clamp(6px, 1.4vmin, 12px) clamp(6px, 1.2vmin, 10px);
   gap: clamp(3px, 0.9vmin, 6px);
   border-radius: clamp(12px, 2.5vmin, 16px);
+}
+#slot-player-1 {
+  position: relative;
+  padding-right: clamp(70px, 14vmin, 96px);
 }
 
 .slot-role {
@@ -2490,22 +2525,63 @@ body {
   font-size: clamp(14px, 3vmin, 17px) !important;
 }
 
-#waitingInviteWhatsappBtn {
-  align-self: center;
-  width: auto !important;
+#waitingInviteWhatsappBtn.waiting-invite-side-btn {
+  position: absolute;
+  top: 50%;
+  right: clamp(12px, 2.6vmin, 20px);
+  transform: translateY(-50%);
+  width: clamp(36px, 7.5vmin, 44px);
+  height: clamp(36px, 7.5vmin, 44px);
   min-width: 0;
-  padding: 8px 14px !important;
-  font-size: 13px !important;
-  font-weight: 700;
-  border-radius: 999px !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  background: #25d366 !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 14px rgba(37, 211, 102, 0.28);
+  min-height: 0;
+  padding: 0 !important;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(10, 26, 18, 0.8);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.36);
+  opacity: 0.82;
+  z-index: 2;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
-#waitingInviteWhatsappBtn:hover {
-  background: #1ebe5b !important;
+#waitingInviteWhatsappBtn.waiting-invite-side-btn:hover {
+  opacity: 1;
+  border-color: rgba(37, 211, 102, 0.7);
+  background: rgba(14, 34, 23, 0.96);
+}
+
+.waiting-invite-side-icon {
+  width: clamp(18px, 3.8vmin, 24px);
+  height: clamp(18px, 3.8vmin, 24px);
+  display: block;
+}
+
+.waiting-invite-side-text {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 50%;
+  transform: translateX(50%);
+  white-space: normal;
+  width: clamp(56px, 11vmin, 72px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.05;
+  font-size: clamp(9px, 1.8vmin, 11px);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: rgba(232, 249, 233, 0.88);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
 }
 
 #waitingOverlay .waiting-status {
@@ -2570,6 +2646,18 @@ body {
   #slot-player-1 {
     order: 3;
   }
+  #slot-player-1 {
+    padding-right: clamp(62px, 18vw, 86px);
+  }
+  #waitingInviteWhatsappBtn.waiting-invite-side-btn {
+    right: clamp(12px, 4vw, 18px);
+  }
+  .waiting-invite-side-text {
+    right: 0;
+    transform: none;
+    width: clamp(52px, 16vw, 66px);
+    font-size: 9px;
+  }
 }
 
 /* Pantalles baixes: encara més dens */
@@ -2577,9 +2665,6 @@ body {
   #waitingOverlay .waiting-faceoff-card {
     padding: 4px 8px;
     gap: 1px;
-  }
-  #waitingOverlay .waiting-portada {
-    max-height: clamp(24px, 5.5vmin, 40px);
   }
   #waitingOverlay .avatar-options {
     grid-template-columns: repeat(4, 1fr) !important;
@@ -3352,13 +3437,11 @@ body {
   }
 }
 
-/* Cartes dins les cel·les de baza (3D) */
+/* Cartes dins les cel·les de baza (3D controlat per GSAP ara) */
 .trick-cell-rival .playing-card,
 .trick-cell-mine .playing-card,
 .trick-cell-rival img,
 .trick-cell-mine img {
-  transform: rotateX(25deg) !important;
-  box-shadow: 0 18px 25px rgba(0, 0, 0, 0.4) !important;
   width: 100% !important;
   height: 100% !important;
   margin: 0 !important;

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#0b1512" />
   <meta
     name="description"
@@ -326,10 +327,12 @@ PANTALLA 2 · MESA DE JUEGO
   <!-- ── OVERLAY: SALA EN ESPERA (cara a cara + preparació) ── -->
   <div id="waitingOverlay" class="overlay hidden">
     <div class="overlay-card waiting-card waiting-faceoff-card">
-      <img src="Media/Images/Others/portada.png" alt="El Truc de la Terreta" class="waiting-portada" />
-
       <div class="waiting-head-block">
         <div class="ov-title">Sala creada</div>
+        <div id="waitingModePts" class="rl-mode-pts-line waiting-mode-pts-line" aria-label="Configuració de la partida">
+          <span id="waitingModeTag" class="rl-tag"></span>
+          <span id="waitingPtsTag" class="rl-tag"></span>
+        </div>
         <div id="waitingCodeRow" class="waiting-code-row">
           <span class="waiting-code-lbl">Codi:</span>
           <span id="waitingCode" class="waiting-code">—</span>
@@ -356,6 +359,26 @@ PANTALLA 2 · MESA DE JUEGO
           </div>
           <div id="waitSlotName1" class="slot-name">—</div>
           <div id="waitSlotGameAv1" class="slot-game-av"></div>
+          <button
+            type="button"
+            id="waitingInviteWhatsappBtn"
+            class="waiting-invite-side-btn"
+            aria-label="Convidar per WhatsApp"
+            title="Convidar per WhatsApp"
+          >
+            <img
+              src="Media/Images/Others/whatsapp.webp"
+              alt=""
+              class="waiting-invite-side-icon"
+              width="20"
+              height="20"
+              decoding="async"
+            />
+            <span class="waiting-invite-side-text">
+              <span>Convidar a</span>
+              <span>un amic</span>
+            </span>
+          </button>
           <div id="waitSlotBadge1" class="slot-badge" data-state="pendent">Pendent...</div>
         </div>
       </div>
@@ -383,9 +406,6 @@ PANTALLA 2 · MESA DE JUEGO
       <div id="waitingStatus" class="waiting-status">Esperant el segon jugador...</div>
 
       <div class="waiting-actions">
-        <button type="button" id="waitingInviteWhatsappBtn" class="lbtn lbtn-secondary waiting-action-btn">
-          📲 Convidar per WhatsApp
-        </button>
         <button type="button" id="hostReadyBtn" class="lbtn lbtn-secondary waiting-action-btn hidden">
           ✋ Estic preparat!
         </button>

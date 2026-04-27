@@ -413,14 +413,13 @@ export function animateScreenShake() {
   );
 }
 
-export function animateTrickCollect(winnerSeat) {
+export function animateTrickCollect() {
   const g = globalThis.gsap;
   if (!g) return;
   const cols = document.querySelectorAll(".trick-col");
   if (!cols.length) return;
   
-  const targetId = winnerSeat === 0 ? "myAvatarContainer" : "rivalAvatarContainer";
-  const target = document.getElementById(targetId);
+  const target = document.getElementById("deckPile");
   const tx = target ? target.getBoundingClientRect().left + target.getBoundingClientRect().width / 2 : window.innerWidth / 2;
   const ty = target ? target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2 : window.innerHeight / 2;
 
@@ -437,7 +436,7 @@ export function animateTrickCollect(winnerSeat) {
 }
 
 export function setupHoverDynamics(el) {
-  if (!el || !globalThis.gsap) return;
+  if (!el || !globalThis.gsap) return () => {};
   const g = globalThis.gsap;
   const onMove = (e) => {
     // Para táctil, toma el primer toque
@@ -479,6 +478,15 @@ export function setupHoverDynamics(el) {
   el.addEventListener("touchmove", onMove, { passive: true });
   el.addEventListener("touchend", onLeave);
   el.addEventListener("touchcancel", onLeave);
+
+  return () => {
+    el.removeEventListener("mousemove", onMove);
+    el.removeEventListener("mouseleave", onLeave);
+    el.removeEventListener("touchmove", onMove);
+    el.removeEventListener("touchend", onLeave);
+    el.removeEventListener("touchcancel", onLeave);
+    g.killTweensOf(el);
+  };
 }
 
 function revealDealWrapsIfAborted(wraps) {

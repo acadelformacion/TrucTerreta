@@ -401,19 +401,8 @@ function openWhatsappInvite() {
     setLobbyMsg("No s'ha pogut generar la invitació de la sala.", "err");
     return;
   }
-  const visTxt = session.roomVisibility === "public" ? "pública" : "privada";
   const roomUrl = `${location.origin}${location.pathname}?sala=${encodeURIComponent(code)}`;
-  const privateCodeLine =
-    session.roomVisibility === "public" ? "" : `Codi de sala: ${code}\n`;
-  const joinHint =
-    session.roomVisibility === "public"
-      ? "Entra ací i t'uniràs directament si hi ha lloc."
-      : "Entra ací i t'uniràs directament a la sala privada.";
-  const msg =
-    `Ei! T'invite a una partida ${visTxt} d'El Truc de la Terreta.\n` +
-    privateCodeLine +
-    `Enllaç: ${roomUrl}\n` +
-    joinHint;
+  const msg = `Ens falta un jugador! Fem un Truc? 👉🏼 ${roomUrl}`;
   const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, "_blank", "noopener,noreferrer");
 }

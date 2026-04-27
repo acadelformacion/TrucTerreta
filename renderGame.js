@@ -1,5 +1,5 @@
 // --- renderGame.js — Motor de renderizado visual ------------------------------
-import { db, session, ref, get, set, onDisconnect } from "./firebase.js";
+import { db, session, ref, get, set, onDisconnect, remove } from "./firebase.js";
 import * as Logica from "./logica.js";
 import {
   defaultState,
@@ -15,6 +15,7 @@ import {
   respondTrucAsBot,
   goMazo,
   claimWinByRivalAbsence,
+  registerRivalAbsence,
 } from "./acciones.js";
 import { sndCard, sndBtn, sndTick, sndWin, sndLose, detectSounds } from "./audio.js";
 import {
@@ -69,6 +70,10 @@ const alreadyPlayed = (h, seat) => getPlayed(h, seat) !== null;
 const bothPlayed = (h) => alreadyPlayed(h, 0) && alreadyPlayed(h, 1);
 const other = (s) => (s === 0 ? 1 : 0);
 const real = (n) => Number(n || OFFSET) - OFFSET;
+const ICO_STONE =
+  '<svg class="rl-svg" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><ellipse cx="12" cy="14" rx="7" ry="5.5" fill="currentColor" opacity=".88"/></svg>';
+const ICO_USER =
+  '<svg class="rl-svg" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/></svg>';
 
 const SUITS = {
   oros: { label: "oros", cls: "s-oros" },
@@ -116,11 +121,73 @@ let _prevPendingOfferStr = "";
 let betweenTimer = null;
 let _betweenCountdownLatch = false;
 
+let preGameInactTimer = null;
+let preGameWarningTimer = null;
+
+function clearPreGameTimers() {
+  clearTimeout(preGameInactTimer);
+  clearInterval(preGameWarningTimer);
+  preGameInactTimer = null;
+  preGameWarningTimer = null;
+  const overlay = $("preGameInactivityOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function startPreGameInactivity() {
+  clearPreGameTimers();
+  preGameInactTimer = setTimeout(() => {
+    showPreGameWarning();
+  }, 9 * 60 * 1000);
+}
+
+function showPreGameWarning() {
+  let overlay = $("preGameInactivityOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "preGameInactivityOverlay";
+    overlay.className = "game-over-overlay";
+    overlay.style.zIndex = "9999";
+    overlay.innerHTML = `
+      <div style="background:rgba(0,0,0,0.85); padding:24px; border-radius:12px; text-align:center; border:1px solid var(--gold);">
+        <h2 style="color:var(--gold); margin-bottom:12px;">Sala inactiva</h2>
+        <p style="margin-bottom:20px;">La partida no comença. Tancant en <span id="preGameWarningCd">60</span>s...</p>
+        <button id="preGameImHereBtn" class="lbtn lbtn-primary">Estic ací</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    
+    $("preGameImHereBtn").addEventListener("click", () => {
+      clearPreGameTimers();
+      startPreGameInactivity();
+    });
+  }
+  overlay.classList.remove("hidden");
+  
+  let cd = 60;
+  const cdSpan = $("preGameWarningCd");
+  cdSpan.textContent = cd;
+  
+  preGameWarningTimer = setInterval(() => {
+    cd--;
+    cdSpan.textContent = cd;
+    if (cd <= 0) {
+      clearPreGameTimers();
+      if (session.roomRef) {
+        remove(session.roomRef).catch(() => {}).finally(() => {
+          const goLeaveBtn = document.getElementById("goLeaveBtn");
+          if (goLeaveBtn) goLeaveBtn.click();
+        });
+      }
+    }
+  }, 1000);
+}
+
 // Presencia
 let _absenceClaimTimer = null;
 let _absenceTickTimer = null;
 let _absenceDeadline = 0;
 let _claimMissingRivalPending = false;
+let _lastRivalAbsentState = false;
 
 // Pre-game onDisconnect
 let _preGameRoomOnDisconnect = null;
@@ -152,6 +219,10 @@ export function buildCard(card) {
   const suitLetter =
     { oros: "o", copas: "c", espadas: "e", bastos: "b" }[suit] || "";
   const imgCode = `${num}${suitLetter}`;
+  
+  const gsapWrap = document.createElement("div");
+  gsapWrap.className = "card-gsap-wrapper";
+
   const el = document.createElement("div");
   el.className = `playing-card ${SUITS[suit]?.cls || ""} use-img`;
   const img = document.createElement("img");
@@ -160,20 +231,28 @@ export function buildCard(card) {
   img.draggable = false;
   img.src = `./Media/Images/Cards/${imgCode}.jpg`;
   el.appendChild(img);
-  return el;
+  
+  gsapWrap.appendChild(el);
+  return gsapWrap;
 }
 
 function buildBack() {
+  const gsapWrap = document.createElement("div");
+  gsapWrap.className = "card-gsap-wrapper";
   const el = document.createElement("div");
   el.className = "card-back";
-  return el;
+  gsapWrap.appendChild(el);
+  return gsapWrap;
 }
 
 /** Revers per al repartiment inicial: mateixa mida que la cara (`.card-back-hand` al CSS). */
 function buildHandDealBack() {
-  const el = buildBack();
-  el.classList.add("card-back-hand");
-  return el;
+  const gsapWrap = document.createElement("div");
+  gsapWrap.className = "card-gsap-wrapper";
+  const el = document.createElement("div");
+  el.className = "card-back card-back-hand";
+  gsapWrap.appendChild(el);
+  return gsapWrap;
 }
 
 function bindMyCardPlayable(wrap, cel, card, myCardsZone) {
@@ -387,9 +466,7 @@ function startGameEndHandSummary(state, animKey) {
     cdEl.classList.add("hidden");
     cdEl.innerHTML = "";
   }
-  const lastTricks = state.lastAllTricks || [];
-  const lastWinner = lastTricks.length > 0 ? lastTricks[lastTricks.length - 1].w : 0;
-  animateTrickCollect(lastWinner);
+  animateTrickCollect();
 
   const duration = 4000 + (handSummaryHasEnvit(state) ? 1000 : 0);
   gameEndSummaryTimer = setTimeout(() => {
@@ -406,12 +483,6 @@ function startGameEndHandSummary(state, animKey) {
 
 function startBetween(summaryHtml, extraDelay = 0, state = null) {
   stopBetween();
-  
-  if (state) {
-    const lastTricks = state.lastAllTricks || [];
-    const lastWinner = lastTricks.length > 0 ? lastTricks[lastTricks.length - 1].w : 0;
-    animateTrickCollect(lastWinner);
-  }
 
   const ov = $("countdownOverlay"),
     lbl = $("countdownLabel");
@@ -442,6 +513,9 @@ function startBetween(summaryHtml, extraDelay = 0, state = null) {
     cdEl.classList.remove("hidden");
     cdEl.innerHTML = `<div class="cd-subtitle">Següent mà en\u2026</div><div class="cd-number">${n}</div>`;
     if (n < cdSeconds) sndTick();
+    if (state && n === 1) {
+      animateTrickCollect();
+    }
     n--;
     betweenTimer = setTimeout(tick, 1000);
   }
@@ -531,6 +605,12 @@ function renderMyCards(state) {
   if (handsKey === _prevHandsKey && z.children.length === myCards.length)
     return;
   _prevHandsKey = handsKey;
+
+  if (z._hoverCleanups) {
+    z._hoverCleanups.forEach(fn => fn && typeof fn === "function" ? fn() : null);
+  }
+  z._hoverCleanups = [];
+
   z.replaceChildren();
 
   const handDealIntro =
@@ -552,7 +632,8 @@ function renderMyCards(state) {
       wrap.appendChild(cel);
       if (canPlay) bindMyCardPlayable(wrap, cel, card, z);
     }
-    setupHoverDynamics(wrap);
+    const cleanup = setupHoverDynamics(wrap);
+    if (cleanup) z._hoverCleanups.push(cleanup);
     z.appendChild(wrap);
   });
 
@@ -643,6 +724,7 @@ function _renderTrickGrid(allTricks, curP0, curP1, didRivalJustPlay = false) {
     if (cardRivalCode && cardRivalCode !== EMPTY_CARD) {
       const el = buildCard(cardRivalCode);
       if (!isDraw && t.w === rival) el.classList.add("trick-winner");
+      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
       cellRival.appendChild(el);
     }
 
@@ -655,6 +737,7 @@ function _renderTrickGrid(allTricks, curP0, curP1, didRivalJustPlay = false) {
     if (cardMineCode && cardMineCode !== EMPTY_CARD) {
       const el = buildCard(cardMineCode);
       if (!isDraw && t.w === me) el.classList.add("trick-winner");
+      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
       cellMine.appendChild(el);
     }
 
@@ -673,6 +756,7 @@ function _renderTrickGrid(allTricks, curP0, curP1, didRivalJustPlay = false) {
     const rivalCard = rival === 0 ? curP0 : curP1;
     if (rivalCard) {
       const el = buildCard(rivalCard);
+      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
       cellRival.appendChild(el);
       if (didRivalJustPlay) {
         animateRivalPlay(el);
@@ -689,6 +773,7 @@ function _renderTrickGrid(allTricks, curP0, curP1, didRivalJustPlay = false) {
     const myCard = me === 0 ? curP0 : curP1;
     if (myCard) {
       const el = buildCard(myCard);
+      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
       el.classList.add("land-anim");
       cellMine.appendChild(el);
     }
@@ -1251,9 +1336,16 @@ function checkPresence(state) {
       if (!bar) return;
 
       if (!absent) {
+        _lastRivalAbsentState = false;
         clearAbsenceTimers();
         bar.classList.add("hidden");
         return;
+      }
+
+      if (!_lastRivalAbsentState) {
+        _lastRivalAbsentState = true;
+        stopTurnTimer();
+        registerRivalAbsence();
       }
 
       bar.classList.remove("hidden");
@@ -1336,7 +1428,15 @@ export function renderAll(room) {
         : null;
   const preGameLobby =
     state.status === "waiting" && real(state.handNumber || OFFSET) === 0;
-  if (!preGameLobby) $("waitingOverlay")?.classList.add("hidden");
+    
+  if (preGameLobby) {
+    if (!preGameInactTimer && !preGameWarningTimer) {
+      startPreGameInactivity();
+    }
+  } else {
+    clearPreGameTimers();
+    $("waitingOverlay")?.classList.add("hidden");
+  }
 
   if (session.roomCode) {
     $("screenLobby").classList.add("hidden");
@@ -1388,6 +1488,7 @@ export function renderAll(room) {
     _prevHandsKey = "";
     _prevTrickKey = "";
     _prevHandKey = hKey;
+    _prevRivalPlayedCount = 0;
   }
   renderHUD(state);
   $("myName").textContent = pName(state, session.mySeat);
@@ -1591,6 +1692,12 @@ export function renderAll(room) {
       _betweenCountdownLatch = false;
       stopBetween();
       $("waitingCode").textContent = session.roomCode || "-";
+      const modo = state?.settings?.modoJuego === "2v2" ? "2v2" : "1v1";
+      const pts = Number(state?.settings?.puntosParaGanar) === 24 ? 24 : 12;
+      const modeTag = $("waitingModeTag");
+      const ptsTag = $("waitingPtsTag");
+      if (modeTag) modeTag.innerHTML = `${ICO_USER}<span>${modo}</span>`;
+      if (ptsTag) ptsTag.innerHTML = `${ICO_STONE}<span>${pts} pedres</span>`;
       $("waitingInviteWhatsappBtn")?.classList.toggle("hidden", isBotActive());
       $("waitingCodeRow")?.classList.toggle(
         "hidden",

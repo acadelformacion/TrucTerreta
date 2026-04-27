@@ -910,3 +910,25 @@ export async function guestReady() {
     return true;
   });
 }
+
+export async function registerRivalAbsence() {
+  await mutate((state) => {
+    if (state.status !== "playing") return false;
+    const rivalSeat = other(session.mySeat);
+    const rival = state.players?.[K(rivalSeat)];
+    if (!rival) return false;
+    
+    rival.disconnects = (rival.disconnects || 0) + 1;
+    pushLog(state, `${rival.name} s'ha desconnectat (${rival.disconnects}/3).`);
+    
+    if (rival.disconnects >= 3) {
+      if (state.hand?.allTricks) state.lastAllTricks = state.hand.allTricks;
+      state.hand = null;
+      state.status = "game_over";
+      state.winner = session.mySeat;
+      state.gameEndReason = "abandonment";
+      pushLog(state, `Victòria per excés de desconnexions de ${rival.name}.`);
+    }
+    return true;
+  });
+}
