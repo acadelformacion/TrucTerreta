@@ -384,17 +384,37 @@ function buildScoreSummary(state) {
       winner = guessWinner();
       const proofHtml = l.envitProof ? envitProofInnerHtml(l.envitProof) : "";
       label = `<span>Envit guanyat per <b>${winner}</b></span>${proofHtml}`;
+      // Usa el seient guardat directament; fallback a guessWinner per logs antics
+      const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
+        ? l.winnerSeat
+        : (winner === p0 ? 0 : 1);
       if (proofHtml) {
         rows.push(
           `<div class="sum-row sum-row--has-proof"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
         );
-        if (winner === p0) pts0 += pts;
+        if (envitPtsTo === 0) pts0 += pts;
         else pts1 += pts;
         continue;
       }
+      // Sense prova: afegim igualment i continuem
+      rows.push(
+        `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
+      );
+      if (envitPtsTo === 0) pts0 += pts;
+      else pts1 += pts;
+      continue;
     } else if (txt.includes("Envit") && txt.includes("rebutjat")) {
       winner = guessWinner();
+      const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
+        ? l.winnerSeat
+        : (winner === p0 ? 0 : 1);
       label = `No vull l'envit - +${pts} per <b>${winner}</b>`;
+      rows.push(
+        `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
+      );
+      if (envitPtsTo === 0) pts0 += pts;
+      else pts1 += pts;
+      continue;
     } else if (
       (txt.includes("Truc") ||
         txt.includes("truc") ||

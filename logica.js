@@ -70,6 +70,9 @@ function pushLog(st, text, meta) {
       points: Number(meta.envitProof.points) || 0,
       cards: meta.envitProof.cards.filter(Boolean),
     };
+  // Guarda el seient guanyador per al resum (evita heurística de noms)
+  if (meta?.winnerSeat === 0 || meta?.winnerSeat === 1)
+    row.winnerSeat = meta.winnerSeat;
   st.logs.unshift(row);
   st.logs = st.logs.slice(0, 30);
 }
@@ -404,8 +407,9 @@ export function applyHandEnd(state, reason, foldedSeat) {
       preProof?.cards?.length > 0
         ? preProof
         : bestEnvitProof(fullHandForSeat(h, ew), visible);
-    const proofMeta =
-      proof.cards?.length > 0
+    const proofMeta = {
+      winnerSeat: ew,
+      ...(proof.cards?.length > 0
         ? {
             envitProof: {
               points: proof.points,
@@ -413,7 +417,8 @@ export function applyHandEnd(state, reason, foldedSeat) {
               ...(envitPerMa ? { perMa: true } : {}),
             },
           }
-        : undefined;
+        : {}),
+    };
     pushLog(
       state,
       isFold
@@ -440,7 +445,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
     } else if (lvl === 4) ep = 2;
     addScore(state, ec, ep);
     const ewName = state.players?.[K(ec)]?.name || `J${ec}`;
-    pushLog(state, `Envit rebutjat: guanya ${ewName} (+${ep}).`);
+    pushLog(state, `Envit rebutjat: guanya ${ewName} (+${ep}).`, { winnerSeat: ec });
     if (finish()) return;
   } else if (isFold && h.pendingOffer?.kind === "envit") {
     // ¡AQUÍ ESTÁ EL CAMBIO! Si alguien se va al mazo con un envite/falta pendiente de responder:
