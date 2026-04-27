@@ -339,11 +339,12 @@ export function animatePlay(cardEl, flyEl, onDone) {
     const dx = to.left + to.width / 2 - (fr.left + fr.width / 2);
     const dy = to.top + to.height / 2 - (fr.top + fr.height / 2);
     const rot = Math.random() * 14 - 7;
-    
+    g.set(flyEl, { transformPerspective: 400, rotationX: 25 });
     g.to(flyEl, {
       x: dx,
       y: dy,
       rotation: rot,
+      rotationX: 25,
       scale: 0.72,
       duration: 0.45,
       ease: "back.out(1.2)",

@@ -2034,25 +2034,27 @@ body {
 @keyframes flyToCenter {
   0% {
     opacity: 1;
-    transform: translate(0, 0) scale(1) rotate(0deg);
+    transform: perspective(400px) rotateX(25deg) translate(0, 0) scale(1) rotate(0deg);
   }
   100% {
     opacity: 0;
-    transform: translate(var(--tx), var(--ty)) scale(0.72) rotate(var(--rot));
+    transform: perspective(400px) rotateX(25deg) translate(var(--tx), var(--ty)) scale(0.72)
+      rotate(var(--rot));
   }
 }
 .card-flying {
   animation: flyToCenter 0.32s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+/* rotateX + perspective: sin esto, transform en keyframes pisa el 3D de GSAP y la carta queda vertical. */
 @keyframes landOnTable {
   from {
     opacity: 0;
-    transform: scale(0.72) translateY(-10px);
+    transform: perspective(400px) rotateX(25deg) scale(0.72) translateY(-10px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: perspective(400px) rotateX(25deg) scale(1) translateY(0);
   }
 }
 .land-anim {
