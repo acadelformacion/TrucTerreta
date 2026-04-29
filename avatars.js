@@ -1,8 +1,8 @@
 // --- avatars.js — Selecció i renderitzat d'avatars ---------------------------
 import { auth, db, session, ref, set, get } from "./firebase.js";
+import { getNumSeats, opponents, teammates } from "./teams.js";
 
 const K = (n) => `_${n}`;
-const other = (s) => (s === 0 ? 1 : 0);
 
 // Injecció de renderAll per a sincronització post-auth (igual que configureActions)
 let _renderAll = null;
@@ -268,12 +268,16 @@ export function pickAvatar(arg) {
 export function renderWaitingSlots(room, state) {
   const avs = room?.avatars || {};
   const srcSelf = srcFromChoice(myAvatarChoice);
-  for (let seat = 0; seat <= 1; seat++) {
+  const numSeats = getNumSeats(state);
+  for (let seat = 0; seat < numSeats; seat++) {
     const ph = document.getElementById(`waitSlotPhoto${seat}`);
     const nm = document.getElementById(`waitSlotName${seat}`);
     const gav = document.getElementById(`waitSlotGameAv${seat}`);
     const bd = document.getElementById(`waitSlotBadge${seat}`);
     if (!ph || !nm || !gav || !bd) continue;
+
+    const sitBtn = document.getElementById(`waitSlotSitBtn${seat}`);
+    const is2v2 = numSeats === 4;
 
     const pl = state?.players?.[K(seat)];
     const pName = (st, s) =>
@@ -285,11 +289,22 @@ export function renderWaitingSlots(room, state) {
       nm.textContent = "—";
       gav.innerHTML = "";
       gav.classList.add("slot-game-av-empty");
-      bd.textContent = "Pendent...";
-      bd.dataset.state = "pendent";
-      bd.classList.remove("slot-badge-ready");
+      
+      if (sitBtn && is2v2 && session.mySeat !== seat) {
+        sitBtn.classList.remove("hidden");
+        bd.classList.add("hidden");
+      } else {
+        if (sitBtn) sitBtn.classList.add("hidden");
+        bd.classList.remove("hidden");
+        bd.textContent = "Pendent...";
+        bd.dataset.state = "pendent";
+        bd.classList.remove("slot-badge-ready");
+      }
       continue;
     }
+    
+    if (sitBtn) sitBtn.classList.add("hidden");
+    bd.classList.remove("hidden");
     ph.classList.remove("is-empty-slot");
     nm.textContent = pName(state, seat);
     ph.src = pl.photoURL || GUEST_LOBBY_AVATAR;
@@ -318,13 +333,25 @@ window.pickAvatar = pickAvatar;
 
 export function renderAvatars(room) {
   const avs = room?.avatars || {};
-  const rawRiv = avs[K(other(session.mySeat))];
+  const opps = opponents(session.mySeat);
+  const rawRiv = opps.length > 0 ? avs[K(opps[0])] : null;
   _rivalAvatarIdx = drawingIndexFromFirebase(rawRiv);
   const myEl = document.getElementById("myAv");
   const rivEl = document.getElementById("rivalAv");
 
   if (myEl) myEl.innerHTML = avatarImgHtml(srcFromChoice(myAvatarChoice));
   if (rivEl) rivEl.innerHTML = avatarImgHtml(srcFromFirebaseAvatar(rawRiv));
+
+  // 2v2: renderitzar avatars del company i rival dret
+  const tmEl = document.getElementById("teammateAv");
+  const rrEl = document.getElementById("rivalRightAv");
+  const tms = teammates(session.mySeat).filter(s => s !== session.mySeat);
+  if (tmEl && tms.length > 0) {
+    tmEl.innerHTML = avatarImgHtml(srcFromFirebaseAvatar(avs[K(tms[0])]));
+  }
+  if (opps.length > 1 && rrEl) {
+    rrEl.innerHTML = avatarImgHtml(srcFromFirebaseAvatar(avs[K(opps[1])]));
+  }
 
   document.querySelectorAll(".av-opt").forEach((el) => {
     const d = el.dataset.av;

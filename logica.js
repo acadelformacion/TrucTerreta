@@ -1,4 +1,20 @@
 // --- Lógica de mano / bazas (extraído de game.js) ----------------------------
+import {
+  teamOf,
+  getNumSeats,
+  allSeats,
+  nextCCW,
+  nextMano,
+  playOrder,
+  teammates,
+  opponents,
+  firstOpponent,
+  responderSeat,
+  callerSeat,
+  emptyPlayers,
+  emptyReady,
+  initialScores,
+} from "./teams.js";
 
 const K = (n) => `_${n}`; // seat: 0->"_0"
 const PK = (n) => `p${n}`; // played key: 0->"p0"
@@ -29,11 +45,15 @@ const getPlayed = (h, seat) => {
   return v && v !== EMPTY_CARD ? v : null;
 };
 const resetPlayed = (h) => {
-  h.played = { [PK(0)]: EMPTY_CARD, [PK(1)]: EMPTY_CARD };
+  const n = h.numSeats || 2;
+  const o = {};
+  for (let i = 0; i < n; i++) o[PK(i)] = EMPTY_CARD;
+  h.played = o;
 };
 
 const real = (n) => Number(n || OFFSET) - OFFSET; // decode stored value
 const other = (s) => (s === 0 ? 1 : 0);
+const otherTeam = (t) => (t === 0 ? 1 : 0);
 
 function getScore(st, seat) {
   return real(st?.scores?.[K(seat)]);
@@ -47,11 +67,41 @@ export function getPuntosParaGanar(state) {
 
 function puntosFalta(state) {
   const lim = getPuntosParaGanar(state);
+  // scores are always keyed by team (0 or 1)
   return lim - Math.max(getScore(state, 0), getScore(state, 1));
 }
-function addScore(st, seat, pts) {
+
+/**
+ * Adds `pts` to the score of TEAM `team` (0 or 1).
+ * In 2v2, both seats of the team share the same score entry (keyed by team index).
+ */
+function addScore(st, team, pts) {
   if (!st.scores) st.scores = { [K(0)]: OFFSET, [K(1)]: OFFSET };
-  st.scores[K(seat)] = Number(st.scores[K(seat)] || OFFSET) + pts;
+  // Ensure only team 0/1 are used as keys (scores are per-team, not per-seat)
+  const t = team % 2;
+  st.scores[K(t)] = Number(st.scores[K(t)] || OFFSET) + pts;
+}
+
+/**
+ * Returns the display name for a winning team.
+ * Prefers the name of the specific winning seat when available;
+ * falls back to listing all teammates' names.
+ */
+function teamWinnerName(state, team, winnerSeat) {
+  const n = state.hand?.numSeats || 2;
+  // If we know the exact winning seat, use that player's name
+  if (winnerSeat !== undefined && winnerSeat !== null) {
+    return state.players?.[K(winnerSeat)]?.name || `J${winnerSeat}`;
+  }
+  // Otherwise collect names of all team members
+  const names = [];
+  for (let i = 0; i < n; i++) {
+    if (i % 2 === team) {
+      const name = state.players?.[K(i)]?.name;
+      if (name) names.push(name);
+    }
+  }
+  return names.length > 0 ? names.join(' & ') : `Equip ${team}`;
 }
 function getTW(h, seat) {
   return real(h?.trickWins?.[K(seat)]);
@@ -154,12 +204,21 @@ export function bestEnvit(cards) {
 /** Cartes que han sortit al centre (bazas completades + jugada actual). */
 export function collectTableCards(h) {
   const set = new Set();
+  const n = h?.numSeats || 2;
   for (const t of h?.allTricks || []) {
-    if (t.c0 && t.c0 !== EMPTY_CARD) set.add(t.c0);
-    if (t.c1 && t.c1 !== EMPTY_CARD) set.add(t.c1);
+    // Format nou: t.cards = { p0, p1, ... }; fallback c0/c1 per compat
+    if (t.cards) {
+      for (let i = 0; i < n; i++) {
+        const v = t.cards[PK(i)];
+        if (v && v !== EMPTY_CARD) set.add(v);
+      }
+    } else {
+      if (t.c0 && t.c0 !== EMPTY_CARD) set.add(t.c0);
+      if (t.c1 && t.c1 !== EMPTY_CARD) set.add(t.c1);
+    }
   }
-  for (const seat of [0, 1]) {
-    const v = h?.played?.[PK(seat)];
+  for (let i = 0; i < n; i++) {
+    const v = h?.played?.[PK(i)];
     if (v && v !== EMPTY_CARD) set.add(v);
   }
   return set;
@@ -234,25 +293,37 @@ export function bestEnvitProof(cards, visibleSet) {
 }
 
 // --- Hand factory -------------------------------------------------------------
-export function makeHand(mano) {
+/**
+ * Crea una nova mà per a `numSeats` jugadors.
+ * @param {number} mano - Seient del mano
+ * @param {number} [numSeats=2] - Nombre de jugadors (2 per 1v1, 4 per 2v2)
+ */
+export function makeHand(mano, numSeats = 2) {
+  const n = numSeats === 4 ? 4 : 2;
   const deck = shuffle(buildDeck());
+  // Repartir 3 cartes a cada jugador
+  const hands = {};
+  for (let i = 0; i < n; i++) {
+    hands[K(i)] = toHObj(deck.slice(i * 3, i * 3 + 3));
+  }
+  // played: sempre present amb EMPTY_CARD per a que Firebase no borre el node
+  const played = {};
+  for (let i = 0; i < n; i++) played[PK(i)] = EMPTY_CARD;
   return {
     status: "in_progress",
+    numSeats: n,
     mano,
     turn: mano,
     mode: "normal",
     envitAvailable: true,
     pendingOffer: null,
     resume: null,
-    hands: {
-      [K(0)]: toHObj(deck.slice(0, 3)),
-      [K(1)]: toHObj(deck.slice(3, 6)),
-    },
-    // played: siempre presente con EMPTY_CARD para que Firebase no lo borre
-    played: { [PK(0)]: EMPTY_CARD, [PK(1)]: EMPTY_CARD },
-    allTricks: [], // array de {c0,c1,w} de todas las bazas jugadas
+    hands,
+    played,
+    allTricks: [],
     trickLead: mano,
     trickIndex: OFFSET, // stored +OFFSET
+    // trickWins i scoreAwards son per EQUIP (sempre 2 equips)
     trickWins: { [K(0)]: OFFSET, [K(1)]: OFFSET },
     trickHistory: [],
     scoreAwards: { [K(0)]: OFFSET, [K(1)]: OFFSET },
@@ -290,50 +361,49 @@ export function mustPlayCardOnlyThisTrick(h, seat) {
     lastTrick.winner === undefined
   )
     return false;
-  if (lastTrick.winner !== seat) return false;
-  if (lastTrick.winner === lastTrick.lead) return false;
+  // lastTrick.winner es índex d'equip; comparem amb l'equip del seat
+  if (lastTrick.winner !== teamOf(seat)) return false;
+  if (lastTrick.winner === teamOf(lastTrick.lead)) return false;
   if (h.trickLead !== seat) return false;
   if (getPlayed(h, seat)) return false;
   return true;
 }
 
 // --- Game logic ---------------------------------------------------------------
+/**
+ * Retorna l'índex d'EQUIP (0 o 1) guanyador de la mà.
+ * trickHistory.winner ja emmagatzema índex d'equip, no de seient.
+ */
 export function handWinner(state) {
   const h = state.hand;
   const hist = h.trickHistory || [];
 
-  // Extraemos quién ganó cada baza (0, 1 o 99 para empate)
   const r1 = hist[0]?.winner;
   const r2 = hist[1]?.winner;
   const r3 = hist[2]?.winner;
 
-  // 1. Victoria por "vía rápida" (2 bazas ganadas)
+  // 1. Victòria ràpida (2 bases guanyades)
   const wins0 = hist.filter((t) => t.winner === 0).length;
   const wins1 = hist.filter((t) => t.winner === 1).length;
   if (wins0 >= 2) return 0;
   if (wins1 >= 2) return 1;
 
-  // 2. Lógica de EMPATES (Pardas)
-
-  // Si la primera es parda...
+  // 2. Lògica de PARDAS
   if (r1 === 99) {
-    if (r2 !== 99 && r2 !== undefined) return r2; // Gana el de la 2ª
-    if (r3 !== 99 && r3 !== undefined) return r3; // Gana el de la 3ª
-    return state.mano; // Las tres pardas: gana el Mano
+    if (r2 !== 99 && r2 !== undefined) return r2;
+    if (r3 !== 99 && r3 !== undefined) return r3;
+    return teamOf(state.mano); // Tres pardas: guanya l'equip del mano
   }
 
-  // Si la primera la ganó alguien...
   if (r1 !== 99 && r1 !== undefined) {
-    if (r2 === 99) return r1; // 1ª ganada, 2ª parda: Gana el de la 1ª
-
-    // Si la 1ª la ganó uno y la 2ª el otro...
+    if (r2 === 99) return r1;
     if (r2 !== 99 && r2 !== r1) {
-      if (r3 === 99) return r1; // 3ª parda: Gana el de la 1ª
-      if (r3 !== undefined) return r3; // 3ª ganada: Gana el de la 3ª
+      if (r3 === 99) return r1;
+      if (r3 !== undefined) return r3;
     }
   }
 
-  return r1 !== 99 && r1 !== undefined ? r1 : state.mano;
+  return r1 !== 99 && r1 !== undefined ? r1 : teamOf(state.mano);
 }
 
 function fullHandForSeat(h, seat) {
@@ -357,7 +427,7 @@ function resolvedEnvitWinnerSeat(envit, mano) {
   if (Number.isFinite(Number(ev0)) && Number.isFinite(Number(ev1))) {
     const v0 = Number(ev0),
       v1 = Number(ev1);
-    return v0 > v1 ? 0 : v1 > v0 ? 1 : mano;
+    return v0 > v1 ? 0 : v1 > v0 ? 1 : teamOf(mano);
   }
   return null;
 }
@@ -365,26 +435,29 @@ function resolvedEnvitWinnerSeat(envit, mano) {
 export function applyHandEnd(state, reason, foldedSeat) {
   const h = state.hand;
   if (!h) return;
-  const buildLastHandSummary = () => ({
-    hands: {
-      _0: h.hands?.[K(0)] || null,
-      _1: h.hands?.[K(1)] || null,
-    },
-    allTricks: h.allTricks || [],
-    envit: {
-      state: h.envit?.state || "none",
-      acceptedLevel: h.envit?.acceptedLevel || null,
-      caller: h.envit?.caller ?? null,
-      winner: resolvedEnvitWinnerSeat(h.envit, state.mano),
-    },
-    truc: {
-      state: h.truc?.state || "none",
-      acceptedLevel: h.truc?.acceptedLevel || null,
-      caller: h.truc?.caller ?? null,
-    },
-    winner: null,
-    mano: h.mano,
-  });
+  const n = h.numSeats || 2;
+  const buildLastHandSummary = () => {
+    // Guardem les mans de tots els jugadors
+    const handsObj = {};
+    for (let i = 0; i < n; i++) handsObj[K(i)] = h.hands?.[K(i)] || null;
+    return {
+      hands: handsObj,
+      allTricks: h.allTricks || [],
+      envit: {
+        state: h.envit?.state || "none",
+        acceptedLevel: h.envit?.acceptedLevel || null,
+        caller: h.envit?.caller ?? null,
+        winner: resolvedEnvitWinnerSeat(h.envit, state.mano),
+      },
+      truc: {
+        state: h.truc?.state || "none",
+        acceptedLevel: h.truc?.acceptedLevel || null,
+        caller: h.truc?.caller ?? null,
+      },
+      winner: null,
+      mano: h.mano,
+    };
+  };
 
   const finish = () => {
     const s0 = getScore(state, 0),
@@ -394,34 +467,41 @@ export function applyHandEnd(state, reason, foldedSeat) {
       state.lastAllTricks = h.allTricks || [];
       pushLog(state, `Marcador: ${getScore(state, 0)}-${getScore(state, 1)}`);
       state.status = "game_over";
-      state.winner = s0 > s1 ? 0 : s1 > s0 ? 1 : state.mano;
+      state.winner = s0 > s1 ? 0 : s1 > s0 ? 1 : teamOf(state.mano);
       state.hand = null;
       return true;
     }
     return false;
   };
 
-  // NUEVO: Detectamos si alguien abandonó la mano ("Me'n vaig")
+  // Detectar si algú ha abandonat la mà ("Me'n vaig")
   const isFold = foldedSeat !== undefined && foldedSeat !== null;
-  const winnerSeat = isFold ? other(foldedSeat) : null;
+  // winnerTeam: l'equip rival del que abandona
+  const winnerTeam = isFold ? otherTeam(teamOf(foldedSeat)) : null;
   state.lastHandSummary = buildLastHandSummary();
 
   // --- 1. RESOLVER ENVIT ---
   if (h.envit.state === "accepted") {
-    let ew = isFold ? winnerSeat : resolvedEnvitWinnerSeat(h.envit, state.mano);
+    let ew = isFold ? winnerTeam : resolvedEnvitWinnerSeat(h.envit, state.mano);
     let envitPerMa = !isFold && (h.envit.perMa === true);
     if (ew === null) {
-      // Últim recurs: mans residuals (sense fiabilitat si ja estan buides → 0-0 i mano)
-      const v0 = bestEnvit(fromHObj(h.hands?.[K(0)]));
-      const v1 = bestEnvit(fromHObj(h.hands?.[K(1)]));
+      // Últim recurs: millor envit de cada equip (mans residuals).
+      // En 2v2: equip 0 = seats 0+2, equip 1 = seats 1+3.
+      const n2 = h.numSeats || 2;
+      let v0 = 0, v1 = 0;
+      for (let i = 0; i < n2; i++) {
+        const v = bestEnvit(fromHObj(h.hands?.[K(i)]));
+        if (i % 2 === 0) { if (v > v0) v0 = v; }
+        else              { if (v > v1) v1 = v; }
+      }
       envitPerMa = !isFold && (v0 === v1);
-      ew = v0 > v1 ? 0 : v1 > v0 ? 1 : state.mano;
+      ew = v0 > v1 ? 0 : v1 > v0 ? 1 : teamOf(state.mano);
     }
     const ep =
       h.envit.acceptedLevel === "falta"
         ? puntosFalta(state)
         : Number(h.envit.acceptedLevel || 0);
-    const ewName = state.players?.[K(ew)]?.name || `J${ew}`;
+    const ewName = teamWinnerName(state, ew);
     addScore(state, ew, ep);
     // Usar prueba precomputada al aceptar el envit (mano completa).
     // Fallback con mano residual para compatibilidad con partidas antiguas.
@@ -467,12 +547,13 @@ export function applyHandEnd(state, reason, foldedSeat) {
       else if (ff === 2) ep = 2;
       else ep = 1;
     } else if (lvl === 4) ep = 2;
-    addScore(state, ec, ep);
-    const ewName = state.players?.[K(ec)]?.name || `J${ec}`;
+    // ec is a team index (0 or 1) — use teamWinnerName to get proper name(s)
+    const ecTeam = (ec !== null && ec !== undefined) ? ec % 2 : 0;
+    addScore(state, ecTeam, ep);
+    const ewName = teamWinnerName(state, ecTeam);
     pushLog(state, `Envit rebutjat: guanya ${ewName} (+${ep}).`, { winnerSeat: ec });
     if (finish()) return;
   } else if (isFold && h.pendingOffer?.kind === "envit") {
-    // ¡AQUÍ ESTÁ EL CAMBIO! Si alguien se va al mazo con un envite/falta pendiente de responder:
     const off = h.pendingOffer;
     let puntos = 1;
     if (off.level === "falta") {
@@ -482,7 +563,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
       else puntos = 1;
     } else if (off.level === 4) puntos = 2;
 
-    addScore(state, winnerSeat, puntos);
+    addScore(state, winnerTeam, puntos);
     pushLog(state, `Envit abandonat: +${puntos} per al rival.`);
     if (finish()) return;
   } else if (
@@ -490,10 +571,8 @@ export function applyHandEnd(state, reason, foldedSeat) {
     h.envit.state === "none" &&
     (h.trickHistory || []).length === 0
   ) {
-    // Timeout/fold en el primer turno sin ningún envit negociado:
-    // el jugador pierde automáticamente el punto de envit
-    addScore(state, winnerSeat, 1);
-    const wName = state.players?.[K(winnerSeat)]?.name || `J${winnerSeat}`;
+    addScore(state, winnerTeam, 1);
+    const wName = teamWinnerName(state, winnerTeam);
     pushLog(state, `Temps: +1 envit per a ${wName}.`);
     if (finish()) return;
   }
@@ -505,12 +584,12 @@ export function applyHandEnd(state, reason, foldedSeat) {
   }
   if (finish()) return;
 
-  // --- 2. RESOLVER TRUC Y LA MANO ---
+  // --- 2. RESOLVER TRUC I LA MÀ ---
   if (h.truc.state === "accepted") {
-    const tw = isFold ? winnerSeat : handWinner(state);
+    const tw = isFold ? winnerTeam : handWinner(state);
     if (state.lastHandSummary) state.lastHandSummary.winner = tw;
     const tp = Number(h.truc.acceptedLevel || 0);
-    const twName = state.players?.[K(tw)]?.name || `J${tw}`;
+    const twName = teamWinnerName(state, tw);
     addScore(state, tw, tp);
     pushLog(
       state,
@@ -520,12 +599,10 @@ export function applyHandEnd(state, reason, foldedSeat) {
     );
     if (finish()) return;
   } else {
-    // Ningún truc aceptado, o se va al mazo cuando le acaban de cantar Truc/Retruc
-    const hw = isFold ? winnerSeat : handWinner(state);
+    const hw = isFold ? winnerTeam : handWinner(state);
     if (hw !== null && hw !== undefined) {
       if (state.lastHandSummary) state.lastHandSummary.winner = hw;
-      const hwName = state.players?.[K(hw)]?.name || `J${hw}`;
-      // Si se va al mazo, pierde el nivel que ya estuviera asegurado (ej: 1 si es normal, 2 si ya había un truc aceptado de antes).
+      const hwName = teamWinnerName(state, hw);
       const tp = isFold ? Number(h.truc.acceptedLevel || 0) || 1 : 1;
       addScore(state, hw, tp);
       pushLog(
@@ -540,7 +617,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
 
   if (reason) pushLog(state, reason);
   pushLog(state, `Marcador: ${getScore(state, 0)}-${getScore(state, 1)}`);
-  state.mano = other(state.mano);
+  state.mano = nextMano(state, state.mano);
   state.turn = state.mano;
   state.status = "waiting";
   state.lastAllTricks = h.allTricks || [];
@@ -550,54 +627,98 @@ export function applyHandEnd(state, reason, foldedSeat) {
 
 export function resolveTrick(state) {
   const h = state.hand;
-  const c0 = getPlayed(h, 0),
-    c1 = getPlayed(h, 1);
-  let w = null;
-  if (c0 && c1) {
-    const cmp = cmpTrick(c0, c1);
-    w = cmp > 0 ? 0 : cmp < 0 ? 1 : null;
+  const n = h.numSeats || 2;
+
+  // Recollir totes les cartes jugades
+  const plays = []; // { seat, card, rank }
+  for (let i = 0; i < n; i++) {
+    const c = getPlayed(h, i);
+    if (c) plays.push({ seat: i, card: c, rank: trickRank(c) });
   }
+  if (plays.length < n) return; // no tots han jugat
+
+  // Trobar el rang més alt
+  const maxRank = Math.max(...plays.map((p) => p.rank));
+  const topPlays = plays.filter((p) => p.rank === maxRank);
+
+  // Determinar equips que tenen la carta més alta
+  const topTeams = new Set(topPlays.map((p) => teamOf(p.seat)));
+
+  // Si ambdós equips tenen la millor carta → parda (99)
+  // Si només un equip → guanya eixe equip
+  let w = null; // team index or null for draw
+  if (topTeams.size === 1) {
+    w = [...topTeams][0];
+  }
+  // else: draw (w = null)
+
   const idx = getTrickIndex(h);
   const lead = h.trickLead ?? state.mano;
-  // Store draw as winner=99 (null would be deleted by Firebase)
-  h.trickHistory = (h.trickHistory || []).concat([
-    { i: idx + 1, c0, c1, winner: w === null ? 99 : w, lead },
-  ]);
+
+  // Construir objecte de la basa per a trickHistory
+  // Mantenim c0/c1 per compatibilitat amb render 1v1 + cards{} per a 2v2
+  const trickEntry = {
+    i: idx + 1,
+    c0: getPlayed(h, 0) || EMPTY_CARD,
+    c1: getPlayed(h, 1) || EMPTY_CARD,
+    winner: w === null ? 99 : w,
+    lead,
+  };
+  // Per a 2v2, guardem totes les cartes en un objecte genèric
+  if (n > 2) {
+    const cards = {};
+    for (let i = 0; i < n; i++) cards[PK(i)] = getPlayed(h, i) || EMPTY_CARD;
+    trickEntry.cards = cards;
+  }
+  h.trickHistory = (h.trickHistory || []).concat([trickEntry]);
+
   if (w !== null) {
-    addTW(h, w);
-    h.turn = w;
-    const wn = state.players?.[K(w)]?.name || `J${w}`;
+    addTW(h, w); // trickWins per equip
+    // El torn el pren el jugador que ha jugat la carta guanyadora
+    // (en cas d'empat dins l'equip, el primer en ordre CCW)
+    const winnerSeat = topPlays.find((p) => teamOf(p.seat) === w).seat;
+    h.turn = winnerSeat;
+    const wn = state.players?.[K(winnerSeat)]?.name || `J${winnerSeat}`;
     pushLog(state, `Baza ${idx + 1}: guanya ${wn}.`);
   } else {
     h.turn = lead;
-    pushLog(state, `Baza ${idx + 1}: EMPAT.`); // EMPAT not undefined
+    pushLog(state, `Baza ${idx + 1}: EMPAT.`);
   }
   h.trickLead = h.turn;
   h.trickIndex = Number(h.trickIndex || OFFSET) + 1;
-  // Guardar la baza resuelta en el array de todas las bazas
-  const newAllTricks = (h.allTricks || []).concat([
-    { c0: c0 || EMPTY_CARD, c1: c1 || EMPTY_CARD, w: w === null ? 99 : w },
-  ]);
+
+  // Guardar la basa resolta en allTricks (amb compat c0/c1 per al render)
+  const allTricksEntry = {
+    c0: getPlayed(h, 0) || EMPTY_CARD,
+    c1: getPlayed(h, 1) || EMPTY_CARD,
+    w: w === null ? 99 : w,
+  };
+  if (n > 2) {
+    const cards = {};
+    for (let i = 0; i < n; i++) cards[PK(i)] = getPlayed(h, i) || EMPTY_CARD;
+    allTricksEntry.cards = cards;
+  }
+  const newAllTricks = (h.allTricks || []).concat([allTricksEntry]);
   h.allTricks = newAllTricks;
   state.lastAllTricks = newAllTricks;
-  // RESET played con EMPTY_CARD - nunca borramos el nodo
+
+  // RESET played amb EMPTY_CARD
   resetPlayed(h);
   h.mode = "normal";
-  // Envit SOLO permitido antes de jugar la 1a carta de la 1a baza
+  // Envit SOLS permés abans de jugar la 1a carta de la 1a basa
   h.envitAvailable = false;
 
   const w0 = getTW(h, 0),
     w1 = getTW(h, 1);
   const tIdx = getTrickIndex(h);
 
-  // --- Comprobación de final de mano ---
+  // --- Comprovació de final de mà ---
   const hist = h.trickHistory || [];
   const b1 = hist[0]?.winner;
   const b2 = hist[1]?.winner;
 
-  // Nueva lógica de handOver:
-  // Se acaba si: alguien tiene 2 victorias, si ya hemos jugado las 3 bazas,
-  // O si hay un ganador tras una parda (B1 parda y B2 decidida, o B1 decidida y B2 parda).
+  // S'acaba si: algú té 2 victòries, si hem jugat 3 bases,
+  // O si hi ha un guanyador rere una parda (B1 parda i B2 decidida, o viceversa).
   const handOver =
     w0 >= 2 ||
     w1 >= 2 ||
@@ -606,8 +727,9 @@ export function resolveTrick(state) {
     (b1 !== 99 && b2 === 99);
 
   if (handOver) {
-    const hw = handWinner(state); // Aquí llamamos a la función de pardas que arreglamos antes
-    const hwName = state.players?.[K(hw)]?.name || `Jugador ${hw}`;
+    const hw = handWinner(state);
+    const hwName = teamWinnerName(state, hw, w !== null ? h.turn : undefined);
     applyHandEnd(state, `Mà guanyada per ${hwName}.`);
   }
 }
+

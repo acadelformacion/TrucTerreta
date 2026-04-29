@@ -209,6 +209,8 @@ PANTALLA 2 · MESA DE JUEGO
       <div class="card-back"></div>
       <div class="card-back"></div>
     </div>
+
+    <!-- ══ ZONA RIVAL (1v1: dalt | 2v2: rival esquerra) ══ -->
     <div id="rivalZone">
       <div class="rival-header">
         <div class="player-avatar-wrap" id="rivalAvatarContainer">
@@ -222,7 +224,29 @@ PANTALLA 2 · MESA DE JUEGO
       </div>
       <div id="rivalCards" class="rival-cards" data-count="0"></div>
     </div>
-  
+
+    <!-- ══ ZONA RIVAL DRET (només 2v2) ══ -->
+    <div id="rivalRightZone" class="side-player-zone side-right hidden">
+      <div class="side-player-header">
+        <div class="player-avatar-wrap" id="rivalRightAvatarContainer">
+          <div id="rivalRightAv" class="player-av-sm"></div>
+        </div>
+        <div id="rivalRightName" class="player-name">—</div>
+      </div>
+      <div id="rivalRightCards" class="rival-cards side-cards" data-count="0"></div>
+    </div>
+
+    <!-- ══ ZONA COMPANY (dalt, només 2v2) ══ -->
+    <div id="teammateZone" class="teammate-zone hidden">
+      <div class="teammate-header">
+        <div class="player-avatar-wrap" id="teammateAvatarContainer">
+          <div id="teammateAv" class="player-av-sm"></div>
+        </div>
+        <div id="teammateName" class="player-name">—</div>
+      </div>
+      <div id="teammateCards" class="rival-cards teammate-cards" data-count="0"></div>
+    </div>
+
     <div id="centerZone">
       <div class="trick-grid" id="trickGrid"></div>
       <div id="centerInfo" class="center-info"></div>
@@ -311,13 +335,20 @@ PANTALLA 2 · MESA DE JUEGO
   <!-- ── CHAT ── -->
   <div id="chatPanel">
     <div id="chatToggle" class="chat-toggle">
-      💬 Xat <span id="chatBadge" class="chat-badge hidden">!</span>
+      <span class="chat-toggle-icon" aria-hidden="true">💬</span>
+      <span class="chat-toggle-label">Xat</span>
+      <span id="chatBadge" class="chat-badge hidden">!</span>
     </div>
     <div id="chatBox" class="chat-box hidden">
       <div id="chatMessages" class="chat-messages"></div>
+      <!-- Panel emojis ràpids (partida) -->
+      <div id="gameEmojiPicker" class="game-emoji-picker hidden" aria-label="Tria un emoji"></div>
       <div class="chat-input-row">
-        <input id="chatInput" type="text" placeholder="Escribe…" maxlength="120" autocomplete="off" />
-        <button id="chatSend" class="chat-send" type="button" aria-label="Enviar mensaje">
+        <button id="gameEmojiBtn" class="chat-emoji-btn" type="button" aria-label="Emojis" title="Emojis">
+          😊
+        </button>
+        <input id="chatInput" type="text" placeholder="Escriu…" maxlength="120" autocomplete="off" />
+        <button id="chatSend" class="chat-send" type="button" aria-label="Enviar missatge">
           ➤
         </button>
       </div>
@@ -339,47 +370,81 @@ PANTALLA 2 · MESA DE JUEGO
         </div>
       </div>
 
-      <div class="waiting-faceoff" aria-label="Jugadors">
-        <div id="slot-player-0" class="player-wait-slot" data-seat="0">
-          <span class="slot-role">Amfitrió</span>
-          <div class="slot-photo-frame slot-photo-frame--lobby-hidden" aria-hidden="true">
-            <img id="waitSlotPhoto0" class="slot-photo" src="" alt="" width="72" height="72" decoding="async" />
+      <div class="waiting-faceoff" id="waitingFaceoff" aria-label="Jugadors">
+        <!-- Equip A (seats 0 i 2) -->
+        <div class="waiting-team waiting-team-a">
+          <div class="waiting-team-label hidden" id="waitingTeamLabelA">Equip A</div>
+          <div class="waiting-team-slots">
+            <div id="slot-player-0" class="player-wait-slot" data-seat="0">
+              <span class="slot-role">Amfitrió</span>
+              <div class="slot-photo-frame slot-photo-frame--lobby-hidden" aria-hidden="true">
+                <img id="waitSlotPhoto0" class="slot-photo" src="" alt="" width="72" height="72" decoding="async" />
+              </div>
+              <div id="waitSlotName0" class="slot-name">—</div>
+              <div id="waitSlotGameAv0" class="slot-game-av"></div>
+              <button type="button" id="waitSlotSitBtn0" class="sit-here-btn hidden">Sentar-se ací</button>
+              <div id="waitSlotBadge0" class="slot-badge" data-state="pendent">Pendent...</div>
+            </div>
+            <div id="slot-player-2" class="player-wait-slot hidden" data-seat="2">
+              <span class="slot-role">Jugador 3</span>
+              <div class="slot-photo-frame slot-photo-frame--lobby-hidden" aria-hidden="true">
+                <img id="waitSlotPhoto2" class="slot-photo" src="" alt="" width="72" height="72" decoding="async" />
+              </div>
+              <div id="waitSlotName2" class="slot-name">—</div>
+              <div id="waitSlotGameAv2" class="slot-game-av"></div>
+              <button type="button" id="waitSlotSitBtn2" class="sit-here-btn hidden">Sentar-se ací</button>
+              <div id="waitSlotBadge2" class="slot-badge" data-state="pendent">Pendent...</div>
+            </div>
           </div>
-          <div id="waitSlotName0" class="slot-name">—</div>
-          <div id="waitSlotGameAv0" class="slot-game-av"></div>
-          <div id="waitSlotBadge0" class="slot-badge" data-state="pendent">Pendent...</div>
         </div>
 
         <div class="waiting-vs" aria-hidden="true">VS</div>
 
-        <div id="slot-player-1" class="player-wait-slot" data-seat="1">
-          <span class="slot-role">Convidat</span>
-          <div class="slot-photo-frame slot-photo-frame--lobby-hidden" aria-hidden="true">
-            <img id="waitSlotPhoto1" class="slot-photo" src="" alt="" width="72" height="72" decoding="async" />
+        <!-- Equip B (seats 1 i 3) -->
+        <div class="waiting-team waiting-team-b">
+          <div class="waiting-team-label hidden" id="waitingTeamLabelB">Equip B</div>
+          <div class="waiting-team-slots">
+            <div id="slot-player-1" class="player-wait-slot" data-seat="1">
+              <span class="slot-role">Convidat</span>
+              <div class="slot-photo-frame slot-photo-frame--lobby-hidden" aria-hidden="true">
+                <img id="waitSlotPhoto1" class="slot-photo" src="" alt="" width="72" height="72" decoding="async" />
+              </div>
+              <div id="waitSlotName1" class="slot-name">—</div>
+              <div id="waitSlotGameAv1" class="slot-game-av"></div>
+              <button
+                type="button"
+                id="waitingInviteWhatsappBtn"
+                class="waiting-invite-side-btn"
+                aria-label="Convidar per WhatsApp"
+                title="Convidar per WhatsApp"
+              >
+                <img
+                  src="Media/Images/Others/whatsapp.webp"
+                  alt=""
+                  class="waiting-invite-side-icon"
+                  width="20"
+                  height="20"
+                  decoding="async"
+                />
+                <span class="waiting-invite-side-text">
+                  <span>Convidar a</span>
+                  <span>un amic</span>
+                </span>
+              </button>
+              <button type="button" id="waitSlotSitBtn1" class="sit-here-btn hidden">Sentar-se ací</button>
+              <div id="waitSlotBadge1" class="slot-badge" data-state="pendent">Pendent...</div>
+            </div>
+            <div id="slot-player-3" class="player-wait-slot hidden" data-seat="3">
+              <span class="slot-role">Jugador 4</span>
+              <div class="slot-photo-frame slot-photo-frame--lobby-hidden" aria-hidden="true">
+                <img id="waitSlotPhoto3" class="slot-photo" src="" alt="" width="72" height="72" decoding="async" />
+              </div>
+              <div id="waitSlotName3" class="slot-name">—</div>
+              <div id="waitSlotGameAv3" class="slot-game-av"></div>
+              <button type="button" id="waitSlotSitBtn3" class="sit-here-btn hidden">Sentar-se ací</button>
+              <div id="waitSlotBadge3" class="slot-badge" data-state="pendent">Pendent...</div>
+            </div>
           </div>
-          <div id="waitSlotName1" class="slot-name">—</div>
-          <div id="waitSlotGameAv1" class="slot-game-av"></div>
-          <button
-            type="button"
-            id="waitingInviteWhatsappBtn"
-            class="waiting-invite-side-btn"
-            aria-label="Convidar per WhatsApp"
-            title="Convidar per WhatsApp"
-          >
-            <img
-              src="Media/Images/Others/whatsapp.webp"
-              alt=""
-              class="waiting-invite-side-icon"
-              width="20"
-              height="20"
-              decoding="async"
-            />
-            <span class="waiting-invite-side-text">
-              <span>Convidar a</span>
-              <span>un amic</span>
-            </span>
-          </button>
-          <div id="waitSlotBadge1" class="slot-badge" data-state="pendent">Pendent...</div>
         </div>
       </div>
 
@@ -415,6 +480,28 @@ PANTALLA 2 · MESA DE JUEGO
         <button type="button" id="startBtn" class="lbtn lbtn-primary waiting-action-btn waiting-start-btn hidden">
           ▶ Iniciar partida
         </button>
+      </div>
+
+      <!-- ── CHAT PRE-PARTIDA ── -->
+      <div id="lobbyChatPanel" class="lobby-chat-panel">
+        <div class="lobby-chat-header">
+          <span class="lobby-chat-title">💬 Xat de sala</span>
+        </div>
+        <div id="lobbyChatMessages" class="lobby-chat-messages"></div>
+        <!-- Picker emojis lobby -->
+        <div id="lobbyEmojiPicker" class="lobby-emoji-picker hidden" aria-label="Tria un emoji"></div>
+        <div class="lobby-chat-input-row">
+          <button id="lobbyEmojiBtn" class="lobby-chat-emoji-btn" type="button" aria-label="Emojis" title="Emojis">😊</button>
+          <input
+            id="lobbyChatInput"
+            class="lobby-chat-input"
+            type="text"
+            placeholder="Escriu un missatge…"
+            maxlength="200"
+            autocomplete="off"
+          />
+          <button id="lobbyChat_Send" class="lobby-chat-send" type="button" aria-label="Enviar missatge">➤</button>
+        </div>
       </div>
 
       <div id="guestWaitMsg" class="waiting-note hidden"></div>
@@ -504,11 +591,11 @@ PANTALLA 2 · MESA DE JUEGO
             <span class="crc-opt-hint">Dos jugadors</span>
           </span>
         </label>
-        <label class="crc-opt crc-opt-disabled">
-          <input type="radio" name="crcModo" value="2v2" disabled />
+        <label class="crc-opt">
+          <input type="radio" name="crcModo" value="2v2" />
           <span class="crc-opt-card">
             <span class="crc-opt-title">2 vs 2</span>
-            <span class="crc-opt-hint">Pròximament...</span>
+            <span class="crc-opt-hint">Quatre jugadors</span>
           </span>
         </label>
       </div>

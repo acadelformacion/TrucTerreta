@@ -9,8 +9,9 @@ import {
   remove,
   onValue,
   runTransaction,
+  onDisconnect,
 } from "./firebase.js";
-import { defaultState } from "./acciones.js";
+import { defaultState, buildDefaultState } from "./acciones.js";
 import * as Logica from "./logica.js";
 import { GUEST_LOBBY_AVATAR } from "./avatars.js";
 import { auth } from "./firebase.js";
@@ -178,8 +179,13 @@ export async function createRoom() {
     const estado = data.state?.status;
     const inactiva = Date.now() - lastActivity > 10 * 60 * 1000;
     const finalizada = estado === "game_over";
-    const sinJugadores =
-      !data.state?.players?.[K(0)] || !data.state?.players?.[K(1)];
+    const sinJugadores = (() => {
+      const maxJ = data.state?.settings?.maxJugadores || 2;
+      for (let i = 0; i < maxJ; i++) {
+        if (!data.state?.players?.[K(i)]) return true;
+      }
+      return false;
+    })();
     if (inactiva || finalizada || sinJugadores) {
       await remove(r);
     } else {
@@ -190,9 +196,13 @@ export async function createRoom() {
   }
   _lastRoomCreatedAt = Date.now();
   const settings = { ..._pendingRoomSettings };
-  const init = defaultState();
+  // buildDefaultState genera els slots correctes per a 2 o 4 jugadors
+  const init = buildDefaultState(
+    settings.maxJugadores,
+    settings.modoJuego,
+    settings.puntosParaGanar,
+  );
   init.roomCode = code;
-  init.settings = { ...settings };
   init.players[K(0)] = {
     name,
     clientId: uid(),
@@ -235,8 +245,13 @@ export async function createRoomAsBot(name) {
     const estado = data.state?.status;
     const inactiva = Date.now() - lastActivity > 10 * 60 * 1000;
     const finalizada = estado === "game_over";
-    const sinJugadores =
-      !data.state?.players?.[K(0)] || !data.state?.players?.[K(1)];
+    const sinJugadores = (() => {
+      const maxJ = data.state?.settings?.maxJugadores || 2;
+      for (let i = 0; i < maxJ; i++) {
+        if (!data.state?.players?.[K(i)]) return true;
+      }
+      return false;
+    })();
     if (inactiva || finalizada || sinJugadores) {
       await remove(r);
     } else {
@@ -246,10 +261,14 @@ export async function createRoomAsBot(name) {
   }
   _lastRoomCreatedAt = Date.now();
 
-  const settings = { ..._pendingRoomSettings };
-  const init = defaultState();
+  const settings = { ..._pendingRoomSettings, modoJuego: "1v1", maxJugadores: 2 };
+  // buildDefaultState genera els slots correctes per al modo de joc
+  const init = buildDefaultState(
+    settings.maxJugadores,
+    settings.modoJuego,
+    settings.puntosParaGanar,
+  );
   init.roomCode = code;
-  init.settings = { ...settings };
   init.players[K(0)] = {
     name: humanName,
     clientId: uid(),
@@ -295,28 +314,31 @@ export async function joinRoom() {
     return;
   }
   const r = ref(db, `rooms/${code}`);
+  let assignedSeat = null;
   const result = await runTransaction(
     r,
     (cur) => {
       if (!cur) return cur;
       if (!cur.state) cur.state = defaultState();
       const st = cur.state;
-      if (!st.players) st.players = { [K(0)]: null, [K(1)]: null };
-      const p0 = st.players[K(0)],
-        p1 = st.players[K(1)];
       const roomSettings = mergeRoomSettings(cur);
       if (!st.settings) st.settings = { ...roomSettings };
-      const maxJ = Math.min(roomSettings.maxJugadores, 2);
-      const ocupats = (p0 ? 1 : 0) + (p1 ? 1 : 0);
-      if (ocupats >= maxJ) return undefined;
-      const extra = authPlayerExtras();
-      if (!p0) {
-        st.players[K(0)] = { name, clientId: uid(), ...extra };
-        pushLog(st, `${name} entra com J0.`);
-      } else {
-        st.players[K(1)] = { name, clientId: uid(), ...extra };
-        pushLog(st, `${name} entra com J1.`);
+      // Nombre de seients per a aquesta sala (2 o 4)
+      const maxJ = roomSettings.maxJugadores || 2;
+      if (!st.players) {
+        st.players = {};
+        for (let i = 0; i < maxJ; i++) st.players[K(i)] = null;
       }
+      // Trobar primer seient lliure
+      let freeSeat = null;
+      for (let i = 0; i < maxJ; i++) {
+        if (!st.players[K(i)]) { freeSeat = i; break; }
+      }
+      if (freeSeat === null) return undefined; // Sala completa
+      const extra = authPlayerExtras();
+      st.players[K(freeSeat)] = { name, clientId: uid(), ...extra };
+      pushLog(st, `${name} entra com J${freeSeat}.`);
+      assignedSeat = freeSeat;
       cur.lastActivity = Date.now();
       return cur;
     },
@@ -326,19 +348,70 @@ export async function joinRoom() {
     setLobbyMsg("Sala completa.", "err");
     return;
   }
-  const fs = result.snapshot.val()?.state;
-  if (!fs) {
+  if (!result.snapshot.val()?.state) {
     setLobbyMsg("Sala no trobada.", "err");
     return;
   }
-  const p0 = fs.players?.[K(0)],
-    p1 = fs.players?.[K(1)];
-  if (p1?.name === name && p0?.name !== name) session.mySeat = 1;
-  else if (p0?.name === name) session.mySeat = 0;
-  else session.mySeat = 1;
+  session.mySeat = assignedSeat ?? 1;
   saveLS(name, code, session.mySeat);
   setLobbyMsg(`Unit com J${session.mySeat}.`, "good");
   _startSession(code);
+}
+
+// --- Canviar seient (2v2 pre-partida) ----------------------------------------
+export async function changeSeat(newSeat) {
+  if (session.mySeat === newSeat || session.mySeat === null) return;
+  const code = session.roomCode;
+  if (!code) return;
+  const r = ref(db, `rooms/${code}`);
+
+  const result = await runTransaction(r, (cur) => {
+    if (!cur || !cur.state || !cur.state.players) return cur;
+    if (cur.state.players[K(newSeat)]) return cur; // Seient ja ocupat
+    
+    // Moure jugador
+    cur.state.players[K(newSeat)] = cur.state.players[K(session.mySeat)];
+    cur.state.players[K(session.mySeat)] = null;
+    
+    // Moure ready status
+    if (cur.state.ready) {
+      const wasReady = cur.state.ready[K(session.mySeat)];
+      cur.state.ready[K(session.mySeat)] = null;
+      if (wasReady) cur.state.ready[K(newSeat)] = true;
+    }
+
+    // Moure avatar
+    if (cur.avatars?.[K(session.mySeat)]) {
+      const av = cur.avatars[K(session.mySeat)];
+      cur.avatars[K(session.mySeat)] = null;
+      cur.avatars[K(newSeat)] = av;
+    }
+    
+    // Moure presencia si cal
+    if (cur.presence?.[K(session.mySeat)]) {
+      const pr = cur.presence[K(session.mySeat)];
+      cur.presence[K(session.mySeat)] = null;
+      cur.presence[K(newSeat)] = pr;
+    }
+
+    cur.lastActivity = Date.now();
+    return cur;
+  }, { applyLocally: false });
+
+  if (result.committed) {
+    const snapState = result.snapshot.val()?.state;
+    if (snapState && snapState.players && snapState.players[K(newSeat)]) {
+      const oldSeat = session.mySeat;
+      session.mySeat = newSeat;
+      localStorage.setItem("truc_seat", String(newSeat));
+      // Actualitzar presència en cas que el node onDisconnect calga refer-se
+      const oldRef = ref(db, `rooms/${code}/presence/${K(oldSeat)}`);
+      onDisconnect(oldRef).cancel();
+      const newRef = ref(db, `rooms/${code}/presence/${K(newSeat)}`);
+      onDisconnect(newRef).set({ absent: true, at: Date.now() });
+      set(newRef, { absent: false, at: Date.now() }).catch(() => {});
+    }
+  }
 }
 
 // --- Llista de sales públiques -----------------------------------------------
@@ -355,23 +428,27 @@ export function loadRoomList() {
         if (room?.meta?.visibility === "private") continue;
         const st = room?.state;
         if (!st) continue;
-        const p0 = st.players?.[K(0)];
-        if (!p0) continue;
-        const p1 = st.players?.[K(1)];
-        const nPlayers = (p0 ? 1 : 0) + (p1 ? 1 : 0);
+        const conf = mergeRoomSettings(room);
+        const maxCap = conf.maxJugadores || 2;
+        // Comptar jugadors presents
+        let nPlayers = 0;
+        for (let i = 0; i < maxCap; i++) {
+          if (st.players?.[K(i)]) nPlayers++;
+        }
         const preGameLobby =
           st.status === "waiting" && real(st.handNumber ?? OFFSET) === 0;
-        if (!p1 && !preGameLobby) continue;
-        if (!p1 && preGameLobby) {
+        if (nPlayers >= maxCap && !preGameLobby) continue;
+        if (nPlayers < maxCap && preGameLobby) {
           const inactive = Date.now() - (room.lastActivity || 0) > 3600000;
           if (inactive) continue;
         }
-        const conf = mergeRoomSettings(room);
-        const maxCap = Math.min(conf.maxJugadores, 2);
+        // Host = primer jugador trobat
+        const host = st.players?.[K(0)] || null;
+        if (!host && nPlayers === 0) continue;
         open.push({
           code,
-          host: p0.name,
-          hostPhoto: lobbyPhotoForPlayer(p0),
+          host: host?.name || "?",
+          hostPhoto: lobbyPhotoForPlayer(host),
           nPlayers,
           maxCap,
           puntosParaGanar: conf.puntosParaGanar,
@@ -486,9 +563,11 @@ export async function limpiarSalasAntiguas() {
       const finalizada = st?.status === "game_over";
       const preGameLobby =
         st?.status === "waiting" && real(st?.handNumber ?? OFFSET) === 0;
-      const p0 = st?.players?.[K(0)];
-      const p1 = st?.players?.[K(1)];
-      const n = (p0 ? 1 : 0) + (p1 ? 1 : 0);
+      const maxJ = st?.settings?.maxJugadores || 2;
+      let n = 0;
+      for (let i = 0; i < maxJ; i++) {
+        if (st?.players?.[K(i)]) n++;
+      }
       const salaTrencada =
         n === 1 && !preGameLobby && ahora - la > ORPHAN_ROOM_MAX_MS;
       if (inactiva || finalizada || salaTrencada) {

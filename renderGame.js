@@ -1,6 +1,7 @@
 // --- renderGame.js — Motor de renderizado visual ------------------------------
 import { db, session, ref, get, set, onDisconnect, remove } from "./firebase.js";
 import * as Logica from "./logica.js";
+import { teamOf, getNumSeats, teammates, opponents } from "./teams.js";
 import {
   defaultState,
   ui,
@@ -67,7 +68,11 @@ const getPlayed = (h, seat) => {
   return v && v !== EMPTY_CARD ? v : null;
 };
 const alreadyPlayed = (h, seat) => getPlayed(h, seat) !== null;
-const bothPlayed = (h) => alreadyPlayed(h, 0) && alreadyPlayed(h, 1);
+const allPlayed = (h) => {
+  const n = h?.numSeats || 2;
+  for (let i = 0; i < n; i++) { if (!alreadyPlayed(h, i)) return false; }
+  return true;
+};
 const other = (s) => (s === 0 ? 1 : 0);
 const real = (n) => Number(n || OFFSET) - OFFSET;
 const ICO_STONE =
@@ -85,8 +90,18 @@ const SUITS = {
 function pName(st, seat) {
   return st?.players?.[K(seat)]?.name || `Jugador ${seat}`;
 }
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 function bothPlayersJoined(st) {
-  return !!(st?.players?.[K(0)] && st?.players?.[K(1)]);
+  const n = getNumSeats(st);
+  for (let i = 0; i < n; i++) { if (!st?.players?.[K(i)]) return false; }
+  return true;
 }
 function getScore(st, seat) {
   return real(st?.scores?.[K(seat)]);
@@ -345,6 +360,8 @@ function buildScoreSummary(state) {
   const logs = state.logs || [];
   const p0 = pName(state, 0),
     p1 = pName(state, 1);
+  const p0Safe = escHtml(p0);
+  const p1Safe = escHtml(p1);
   let marcCount = 0;
   const handLogs = [];
   for (const l of logs) {
@@ -371,11 +388,11 @@ function buildScoreSummary(state) {
     const hasJ0 = txt.match(/\bJ0\b/);
     const hasJ1 = txt.match(/\bJ1\b/);
     const guessWinner = () => {
-      if (hasP0name && !hasP1name) return p0;
-      if (hasP1name && !hasP0name) return p1;
-      if (hasJ0 && !hasJ1) return p0;
-      if (hasJ1 && !hasJ0) return p1;
-      return p0;
+      if (hasP0name && !hasP1name) return p0Safe;
+      if (hasP1name && !hasP0name) return p1Safe;
+      if (hasJ0 && !hasJ1) return p0Safe;
+      if (hasJ1 && !hasJ0) return p1Safe;
+      return p0Safe;
     };
     if (
       txt.includes("Envit") &&
@@ -387,7 +404,7 @@ function buildScoreSummary(state) {
       // Usa el seient guardat directament; fallback a guessWinner per logs antics
       const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
         ? l.winnerSeat
-        : (winner === p0 ? 0 : 1);
+        : (winner === p0Safe ? 0 : 1);
       if (proofHtml) {
         rows.push(
           `<div class="sum-row sum-row--has-proof"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
@@ -407,7 +424,7 @@ function buildScoreSummary(state) {
       winner = guessWinner();
       const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
         ? l.winnerSeat
-        : (winner === p0 ? 0 : 1);
+        : (winner === p0Safe ? 0 : 1);
       label = `No vull l'envit - +${pts} per <b>${winner}</b>`;
       rows.push(
         `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
@@ -442,7 +459,7 @@ function buildScoreSummary(state) {
     } else {
       continue;
     }
-    if (winner === p0) pts0 += pts;
+    if (winner === p0Safe) pts0 += pts;
     else pts1 += pts;
     rows.push(
       `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
@@ -453,7 +470,7 @@ function buildScoreSummary(state) {
   html += rows.length
     ? rows.join("")
     : '<div style="color:var(--muted);font-size:12px">Cap punt especial</div>';
-  html += `</div><div class="sum-result">${p0} <span class="sum-score">${pts0}</span> - <span class="sum-score">${pts1}</span> ${p1}</div>`;
+  html += `</div><div class="sum-result">${p0Safe} <span class="sum-score">${pts0}</span> - <span class="sum-score">${pts1}</span> ${p1Safe}</div>`;
   return html;
 }
 
@@ -548,38 +565,94 @@ function startBetween(summaryHtml, extraDelay = 0, state = null) {
  * Estructurado con seatId genérico para 2v2: cada rival tiene su propio
  * contenedor DOM indexado por asiento.
  */
-function renderPlayerZone(seatId, handObj) {
-  // En 1v1 el rival está siempre en #rivalCards.
-  // Para 2v2 se usaría #rivalCards-{seatId} u otro contenedor indexado.
-  const zone = seatId === other(session.mySeat) ? $("rivalCards") : null;
-  if (!zone) return;
-  zone.replaceChildren();
+/**
+ * Draws face-down cards for a rival/teammate zone.
+ * Detects if the zone uses vertical stacking (side-cards) or horizontal (top/bottom)
+ * and adjusts offsets accordingly.
+ */
+function renderPlayerZone(zoneEl, handObj) {
+  if (!zoneEl) return;
+  zoneEl.replaceChildren();
   const cards = fromHObj(handObj);
   const n = cards.length;
-  zone.setAttribute("data-count", String(n));
+  zoneEl.setAttribute("data-count", String(n));
+  const isVertical = zoneEl.classList.contains("side-cards");
   for (let i = 0; i < n; i++) {
     const s = document.createElement("div");
     s.className = "rival-card-slot";
-    const angles = n === 3 ? [-8, 0, 8] : n === 2 ? [-5, 5] : [0];
-    const xoffs = n === 3 ? [-44, 0, 44] : n === 2 ? [-24, 24] : [0];
-    s.style.cssText = `transform:translateX(${xoffs[i] || 0}px) rotate(${angles[i] || 0}deg);z-index:${i + 1};`;
+    if (isVertical) {
+      // Vertical stacking: CSS handles margin-top via .side-cards .rival-card-slot
+      s.style.cssText = `z-index:${i + 1};`;
+    } else {
+      const angles = n === 3 ? [-8, 0, 8] : n === 2 ? [-5, 5] : [0];
+      const xoffs  = n === 3 ? [-44, 0, 44] : n === 2 ? [-24, 24] : [0];
+      s.style.cssText = `transform:translateX(${xoffs[i] || 0}px) rotate(${angles[i] || 0}deg);z-index:${i + 1};`;
+    }
     s.appendChild(buildBack());
-    zone.appendChild(s);
+    zoneEl.appendChild(s);
   }
 }
 
 /**
- * Itera sobre todos los asientos que no son el propio para renderizar rivales.
- * Extensible a N jugadores: en 2v2 iterará sobre 3 rivales.
+ * Mapeja cada seat (que no siga el meu) a la seua zona HTML.
+ * 1v1: rival → #rivalCards (com abans)
+ * 2v2 creu:
+ *   - Company (teammate) → #teammateCards (dalt)
+ *   - Rival esquerra → #rivalCards (esquerra)
+ *   - Rival dret → #rivalRightCards (dreta)
  */
 function renderRivalZones(state) {
-  const allSeats = Object.keys(state.players || {})
-    .map((k) => Number(k.replace("_", "")))
-    .filter((s) => s !== session.mySeat);
-  const rivals = allSeats.length > 0 ? allSeats : [other(session.mySeat)];
-  rivals.forEach((seatId) => {
-    renderPlayerZone(seatId, state.hand?.hands?.[K(seatId)]);
-  });
+  const n = getNumSeats(state);
+  const is2v2 = n === 4;
+
+  // Alternar mode visual
+  const body = document.body;
+  const table = $("table");
+  if (is2v2) {
+    body.setAttribute("data-mode", "2v2");
+    if (table) table.classList.add("table-2v2");
+  } else {
+    body.removeAttribute("data-mode");
+    if (table) table.classList.remove("table-2v2");
+  }
+
+  // Mostrar/ocultar zones 2v2
+  const tmZone = $("teammateZone");
+  const rrZone = $("rivalRightZone");
+  if (tmZone) tmZone.classList.toggle("hidden", !is2v2);
+  if (rrZone) rrZone.classList.toggle("hidden", !is2v2);
+
+  if (!is2v2) {
+    // 1v1: renderitzar al rival al rivalCards com sempre
+    const rivalSeat = other(session.mySeat);
+    renderPlayerZone($("rivalCards"), state.hand?.hands?.[K(rivalSeat)]);
+    // Nom i avatar del rival
+    const rn = $("rivalName");
+    if (rn) rn.textContent = pName(state, rivalSeat);
+    return;
+  }
+
+  // 2v2: determinar seats relatius
+  const me = session.mySeat;
+  const myTeam = teamOf(me);
+  const tm = teammates(me).filter(s => s !== me);
+  const opps = opponents(me);
+
+  // Company (teammate) → dalt
+  const tmSeat = tm[0] ?? -1;
+  renderPlayerZone($("teammateCards"), state.hand?.hands?.[K(tmSeat)]);
+  const tn = $("teammateName");
+  if (tn) tn.textContent = tmSeat >= 0 ? pName(state, tmSeat) : "—";
+
+  // Rivals → esquerra (rivalCards) i dreta (rivalRightCards)
+  const rivalL = opps[0] ?? -1;
+  const rivalR = opps[1] ?? -1;
+  renderPlayerZone($("rivalCards"), state.hand?.hands?.[K(rivalL)]);
+  renderPlayerZone($("rivalRightCards"), state.hand?.hands?.[K(rivalR)]);
+  const rn = $("rivalName");
+  if (rn) rn.textContent = rivalL >= 0 ? pName(state, rivalL) : "—";
+  const rrn = $("rivalRightName");
+  if (rrn) rrn.textContent = rivalR >= 0 ? pName(state, rivalR) : "—";
 }
 
 export function resetHandIntroPlayed() {
@@ -722,86 +795,87 @@ function renderMyCards(state) {
 }
 
 // --- Grid de bazas ------------------------------------------------------------
-function _renderTrickGrid(allTricks, curP0, curP1, didRivalJustPlay = false) {
+/**
+ * Extrau la carta d'un seat d'un objecte trick.
+ * Suporta format 1v1 (t.c0/t.c1) i 2v2 (t.cards.p0/.p1/.p2/.p3).
+ */
+function _trickCardForSeat(t, seat) {
+  if (t.cards) return t.cards[PK(seat)] || null;
+  return seat === 0 ? t.c0 : t.c1;
+}
+
+function _renderTrickGrid(allTricks, playedMap, numSeats, didRivalJustPlay = false) {
   const grid = $("trickGrid");
   if (!grid) return;
   grid.replaceChildren();
 
-  const me = session.mySeat,
-    rival = other(session.mySeat);
-  const hasCurrent = curP0 || curP1;
+  const me = session.mySeat;
+  const myTeam = teamOf(me);
+  const hasCurrent = Object.values(playedMap || {}).some(Boolean);
   if (allTricks.length === 0 && !hasCurrent) return;
 
-  allTricks.forEach((t) => {
+  // Helper: construeix una columna de basa
+  const buildTrickCol = (getCard, winner, isCurrent, justPlayed) => {
     const col = document.createElement("div");
     col.className = "trick-col";
-    const isDraw = t.w === 99 || t.w === null || t.w === undefined;
-    if (isDraw) col.classList.add("trick-draw");
+    if (numSeats === 4) col.classList.add("trick-col-4p");
+    const isDraw = winner === 99 || winner === null || winner === undefined;
+    if (isDraw && !isCurrent) col.classList.add("trick-draw");
 
+    // Fila rivals (dalt)
     const cellRival = document.createElement("div");
     cellRival.className = "trick-cell-rival";
-    const cardRivalCode = rival === 0 ? t.c0 : t.c1;
-    if (cardRivalCode && cardRivalCode !== EMPTY_CARD) {
-      const el = buildCard(cardRivalCode);
-      if (!isDraw && t.w === rival) el.classList.add("trick-winner");
-      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
-      cellRival.appendChild(el);
-    }
-
-    const sep = document.createElement("div");
-    sep.className = "trick-row-sep";
-
-    const cellMine = document.createElement("div");
-    cellMine.className = "trick-cell-mine";
-    const cardMineCode = me === 0 ? t.c0 : t.c1;
-    if (cardMineCode && cardMineCode !== EMPTY_CARD) {
-      const el = buildCard(cardMineCode);
-      if (!isDraw && t.w === me) el.classList.add("trick-winner");
-      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
-      cellMine.appendChild(el);
-    }
-
-    col.appendChild(cellRival);
-    col.appendChild(sep);
-    col.appendChild(cellMine);
-    grid.appendChild(col);
-  });
-
-  if (hasCurrent) {
-    const col = document.createElement("div");
-    col.className = "trick-col";
-
-    const cellRival = document.createElement("div");
-    cellRival.className = "trick-cell-rival";
-    const rivalCard = rival === 0 ? curP0 : curP1;
-    if (rivalCard) {
-      const el = buildCard(rivalCard);
-      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
-      cellRival.appendChild(el);
-      if (didRivalJustPlay) {
-        animateRivalPlay(el);
-      } else {
-        el.classList.add("land-anim");
+    for (let s = 0; s < numSeats; s++) {
+      if (teamOf(s) === myTeam) continue;
+      const code = getCard(s);
+      if (code && code !== EMPTY_CARD) {
+        const el = buildCard(code);
+        if (!isDraw && !isCurrent && winner !== undefined && teamOf(winner) !== myTeam)
+          el.classList.add("trick-winner");
+        globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
+        if (isCurrent && justPlayed && teamOf(s) !== myTeam) animateRivalPlay(el);
+        else if (isCurrent) el.classList.add("land-anim");
+        cellRival.appendChild(el);
       }
     }
 
     const sep = document.createElement("div");
     sep.className = "trick-row-sep";
 
+    // Fila meua (baix)
     const cellMine = document.createElement("div");
     cellMine.className = "trick-cell-mine";
-    const myCard = me === 0 ? curP0 : curP1;
-    if (myCard) {
-      const el = buildCard(myCard);
-      globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
-      el.classList.add("land-anim");
-      cellMine.appendChild(el);
+    for (let s = 0; s < numSeats; s++) {
+      if (teamOf(s) !== myTeam) continue;
+      const code = getCard(s);
+      if (code && code !== EMPTY_CARD) {
+        const el = buildCard(code);
+        if (!isDraw && !isCurrent && winner !== undefined && teamOf(winner) === myTeam)
+          el.classList.add("trick-winner");
+        globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
+        if (isCurrent) el.classList.add("land-anim");
+        cellMine.appendChild(el);
+      }
     }
 
     col.appendChild(cellRival);
     col.appendChild(sep);
     col.appendChild(cellMine);
-    grid.appendChild(col);
+    return col;
+  };
+
+  // Bazas resoltes
+  allTricks.forEach((t) => {
+    grid.appendChild(
+      buildTrickCol((s) => _trickCardForSeat(t, s), t.w, false, false)
+    );
+  });
+
+  // Basa actual
+  if (hasCurrent) {
+    grid.appendChild(
+      buildTrickCol((s) => playedMap[s] || null, undefined, true, didRivalJustPlay)
+    );
   }
 }
 
@@ -809,7 +883,7 @@ function renderTrickSnapshot(snapshot) {
   const key = "snap|" + snapshot.key;
   if (key === _prevTrickKey) return;
   _prevTrickKey = key;
-  _renderTrickGrid(snapshot.allTricks, null, null);
+  _renderTrickGrid(snapshot.allTricks, {}, 2);
 }
 
 function renderTrick(state) {
@@ -833,38 +907,40 @@ function renderTrick(state) {
     return;
   }
   const allT = h.allTricks || [];
-  const p0 = getPlayed(h, 0),
-    p1 = getPlayed(h, 1);
+  const numSeats = h.numSeats || 2;
+
+  // Construir mapa de played per a tots els seats
+  const playedMap = {};
+  for (let s = 0; s < numSeats; s++) playedMap[s] = getPlayed(h, s);
     
-  const rivalSeat = other(session.mySeat);
-  const rivalP = rivalSeat === 0 ? p0 : p1;
+  // Detectar si algun rival acaba de jugar
+  let totalRivalPlayed = allT.length;
+  for (let s = 0; s < numSeats; s++) {
+    if (teamOf(s) !== teamOf(session.mySeat) && playedMap[s]) totalRivalPlayed++;
+  }
   let didRivalJustPlay = false;
-  const rivalPlayedCount = allT.length + (rivalP ? 1 : 0);
-  if (rivalPlayedCount > _prevRivalPlayedCount) {
+  if (totalRivalPlayed > _prevRivalPlayedCount) {
     sndCard(Math.floor(Math.random() * 15));
     didRivalJustPlay = true;
   }
-  _prevRivalPlayedCount = rivalPlayedCount;
+  _prevRivalPlayedCount = totalRivalPlayed;
 
   const offerTag = h.pendingOffer
     ? `${h.pendingOffer.kind}:${h.pendingOffer.level}`
     : "";
+  // trickKey inclou totes les cartes jugades
+  let playedStr = "";
+  for (let s = 0; s < numSeats; s++) playedStr += "|" + (playedMap[s] || "-");
   const trickKey =
     real(state.handNumber || OFFSET) +
-    "|" +
-    allT.length +
-    "|" +
-    (p0 || "-") +
-    "|" +
-    (p1 || "-") +
-    "|" +
-    h.mode +
-    "|" +
-    offerTag;
+    "|" + allT.length +
+    playedStr +
+    "|" + h.mode +
+    "|" + offerTag;
 
   if (trickKey !== _prevTrickKey) {
     _prevTrickKey = trickKey;
-    _renderTrickGrid(allT, p0, p1, didRivalJustPlay);
+    _renderTrickGrid(allT, playedMap, numSeats, didRivalJustPlay);
   }
 
   if (info) {
@@ -876,7 +952,7 @@ function renderTrick(state) {
         const d = document.createElement("div");
         d.className = "trick-dot";
         if (t.winner === 99 || t.winner === null) d.classList.add("draw");
-        else if (t.winner === session.mySeat) d.classList.add("won");
+        else if (teamOf(t.winner) === teamOf(session.mySeat)) d.classList.add("won");
         else d.classList.add("lost");
         dots.appendChild(d);
       });
@@ -945,7 +1021,12 @@ function renderActions(state) {
     noTrucAtAll &&
     norm;
 
-  const nadieHaJugado = !alreadyPlayed(h, 0) && !alreadyPlayed(h, 1);
+  // N-seat aware: noone has played yet only when ALL seats are empty
+  const nadieHaJugado = (() => {
+    const ns = h.numSeats || 2;
+    for (let s = 0; s < ns; s++) { if (alreadyPlayed(h, s)) return false; }
+    return true;
+  })();
   const sinApuestasPrevias = h.envit.state === "none" && h.truc.state === "none";
   const bloqueoInicio = noTricksPlayed && nadieHaJugado && sinApuestasPrevias;
 
@@ -1079,8 +1160,9 @@ function renderActions(state) {
   const sm = $("statusMsg");
   if (sm) {
     sm.classList.remove("my-turn");
-    if (played && !bothPlayed(h)) {
-      sm.textContent = `Esperant a ${pName(state, other(session.mySeat))}...`;
+    if (played && !allPlayed(h)) {
+      // In 2v2 show the name of whoever actually has the turn, not just "the other"
+      sm.textContent = `Esperant a ${pName(state, h.turn)}...`;
     } else if (h.pendingOffer && h.turn !== session.mySeat) {
       sm.textContent = `Esperant a ${pName(state, h.turn)}...`;
     } else if (!myT && !played) {
@@ -1234,19 +1316,59 @@ function scheduleBotIfNeededFromGameState(state) {
   }, botDelayMs);
 }
 
-// --- Timer de turno del rival ------------------------------------------------
+// --- Turn-zone indicator (1v1 + 2v2) -----------------------------------------
+/**
+ * Applies .zone-active-turn / .zone-waiting to every player zone.
+ * In 1v1 also toggles the legacy .turn-active class.
+ * seatToZoneId maps seat → DOM element id so the logic is data-driven.
+ */
 function updateRivalTimer(state) {
   const h = state.hand;
-  const my = $("myZone"), riv = $("rivalZone");
+  const n = getNumSeats(state);
+  const is2v2 = n === 4;
   const playing = h && state.status === "playing" && h.status === "in_progress";
-  const myActive =
-    playing && h.turn === session.mySeat && !alreadyPlayed(h, session.mySeat);
-  const rivActive =
-    playing &&
-    h.turn === other(session.mySeat) &&
-    !alreadyPlayed(h, other(session.mySeat));
-  if (my) my.classList.toggle("turn-active", !!myActive);
-  if (riv) riv.classList.toggle("turn-active", !!rivActive);
+  const activeSeat = playing ? h.turn : -1;
+
+  if (!is2v2) {
+    // 1v1 legacy path — keep .turn-active for CSS transitions
+    const my = $("myZone"), riv = $("rivalZone");
+    const myActive  = playing && activeSeat === session.mySeat && !alreadyPlayed(h, session.mySeat);
+    const rivActive = playing && activeSeat === other(session.mySeat) && !alreadyPlayed(h, other(session.mySeat));
+    if (my)  my.classList.toggle("turn-active", !!myActive);
+    if (riv) riv.classList.toggle("turn-active", !!rivActive);
+    // clear 2v2 classes if mode was switched
+    [$("teammateZone"), $("rivalRightZone")].forEach(el => {
+      el?.classList.remove("zone-active-turn", "zone-waiting", "team-a", "team-b");
+    });
+    return;
+  }
+
+  // 2v2 path — use zone-active-turn / zone-waiting + team color hints
+  const me = session.mySeat;
+  const tm = teammates(me).find(s => s !== me) ?? -1;
+  const opps = opponents(me);
+
+  /** seat → zone element */
+  const seatZone = (seat) => {
+    if (seat === me)       return $("myZone");
+    if (seat === tm)       return $("teammateZone");
+    if (seat === opps[0])  return $("rivalZone");
+    if (seat === opps[1])  return $("rivalRightZone");
+    return null;
+  };
+
+  [me, tm, opps[0], opps[1]].forEach(seat => {
+    const el = seatZone(seat);
+    if (!el) return;
+    const isActive = playing && activeSeat === seat && !alreadyPlayed(h, seat);
+    el.classList.toggle("zone-active-turn", isActive);
+    el.classList.toggle("zone-waiting", playing && !isActive);
+    // team color class for the pulse animation
+    el.classList.toggle("team-a", isActive && teamOf(seat) === 0);
+    el.classList.toggle("team-b", isActive && teamOf(seat) === 1);
+    // keep legacy turn-active for myZone (used by CSS timer ring)
+    if (seat === me) el.classList.toggle("turn-active", isActive);
+  });
 }
 
 // --- HUD ---------------------------------------------------------------------
@@ -1256,8 +1378,10 @@ function renderHUD(state) {
     ? "Sala p\u00fablica"
     : `Sala ${session.roomCode || "-"}`;
 
-  const sMy = getScore(state, session.mySeat);
-  const sRiv = getScore(state, other(session.mySeat));
+  const myTeam = teamOf(session.mySeat);
+  const rivTeam = myTeam === 0 ? 1 : 0;
+  const sMy = getScore(state, myTeam);
+  const sRiv = getScore(state, rivTeam);
 
   animateHUDPoints("hudScore0", sMy, 0);
   animateHUDPoints("hudScore1", sRiv, 1);
@@ -1276,16 +1400,21 @@ function renderHUD(state) {
 function renderLog(state) {
   const a = $("logArea");
   if (!a) return;
-  const p0 = pName(state, 0), p1 = pName(state, 1);
+  // Build seat→name map for all seats (supports 1v1 and 2v2)
+  const numSeats = getNumSeats(state);
+  const seatNames = {};
+  for (let s = 0; s < numSeats; s++) seatNames[s] = pName(state, s);
   const frag = document.createDocumentFragment();
   (state.logs || []).slice(0, 15).forEach((item) => {
     const wrap = document.createElement("div");
     wrap.className = "log-entry";
     const line = document.createElement("div");
     line.className = "log-entry-line";
-    line.textContent = (item.text || "")
-      .replace(/\bJ0\b/g, p0)
-      .replace(/\bJ1\b/g, p1);
+    let txt = item.text || "";
+    for (let s = 0; s < numSeats; s++) {
+      txt = txt.replace(new RegExp(`\\bJ${s}\\b`, "g"), seatNames[s]);
+    }
+    line.textContent = txt;
     wrap.appendChild(line);
     if (item.envitProof?.cards?.length) {
       const row = document.createElement("div");
@@ -1339,7 +1468,11 @@ function checkPresence(state) {
     $("absenceBar")?.classList.add("hidden");
     return;
   }
-  get(ref(db, `rooms/${session.roomCode}/presence/${K(other(session.mySeat))}`))
+  // In 2v2 check presence of the first opponent; in 1v1 check the single rival
+  const presenceSeat = getNumSeats(state) === 4
+    ? opponents(session.mySeat)[0]
+    : other(session.mySeat);
+  get(ref(db, `rooms/${session.roomCode}/presence/${K(presenceSeat)}`))
     .then((snap) => {
       if (!session.roomCode || session.mySeat === null) return;
       if (!isActiveMatchState(_lastState) || _lastState.status === "game_over") {
@@ -1481,18 +1614,23 @@ export function renderAll(room) {
     $("tableCdEl")?.classList.add("hidden");
   }
   checkPresence(state);
+  // In 2v2, check that at least one opponent is present (not both seats missing)
   if (
     session.mySeat !== null &&
     session.roomCode &&
     isActiveMatchState(state) &&
-    state.status !== "game_over" &&
-    !state.players?.[K(other(session.mySeat))]
+    state.status !== "game_over"
   ) {
-    if (!_claimMissingRivalPending) {
-      _claimMissingRivalPending = true;
-      claimWinByRivalAbsence().finally(() => {
-        _claimMissingRivalPending = false;
-      });
+    const n2 = getNumSeats(state);
+    const opps2 = n2 === 4 ? opponents(session.mySeat) : [other(session.mySeat)];
+    const allOpponentsGone = opps2.every(s => !state.players?.[K(s)]);
+    if (allOpponentsGone) {
+      if (!_claimMissingRivalPending) {
+        _claimMissingRivalPending = true;
+        claimWinByRivalAbsence().finally(() => {
+          _claimMissingRivalPending = false;
+        });
+      }
     }
   }
   renderAvatars(room);
@@ -1509,7 +1647,10 @@ export function renderAll(room) {
   }
   renderHUD(state);
   $("myName").textContent = pName(state, session.mySeat);
-  $("rivalName").textContent = pName(state, other(session.mySeat));
+  // In 2v2 rivalName is set inside renderRivalZones; skip overwrite here
+  if (getNumSeats(state) < 4) {
+    $("rivalName").textContent = pName(state, other(session.mySeat));
+  }
 
   const openingAnimKey =
     state.status === "playing" &&
@@ -1528,17 +1669,42 @@ export function renderAll(room) {
     _openingAnimPendingKey = openingAnimKey;
     _openingAnimRunning = true;
     loadAvatarChoiceIntoMemory();
+
+    const n4 = getNumSeats(state);
+    const is2v2intro = n4 === 4;
+    const me4 = session.mySeat;
     const _vsMineSrc = srcFromChoice(myAvatarChoice) || AVATAR_IMAGES[0];
-    const _vsRivalSrc =
-      srcFromFirebaseAvatar(_lastRoom?.avatars?.[K(other(session.mySeat))]) ||
-      AVATAR_IMAGES[0];
+
+    let bottomLabel, topLabel, rivalSrcForIntro;
+    if (is2v2intro) {
+      // Bottom band: my team (me + teammate)
+      const tm4 = teammates(me4).filter(s => s !== me4);
+      const tmName = tm4.length ? pName(state, tm4[0]) : "";
+      bottomLabel = tmName
+        ? `${pName(state, me4)} & ${tmName}`
+        : pName(state, me4);
+      // Top band: opponent team names
+      const opps4 = opponents(me4);
+      const opp0Name = opps4[0] >= 0 ? pName(state, opps4[0]) : "—";
+      const opp1Name = opps4[1] >= 0 ? pName(state, opps4[1]) : "";
+      topLabel = opp1Name ? `${opp0Name} & ${opp1Name}` : opp0Name;
+      // Avatar: use first opponent's avatar
+      rivalSrcForIntro =
+        srcFromFirebaseAvatar(_lastRoom?.avatars?.[K(opps4[0])]) || AVATAR_IMAGES[0];
+    } else {
+      bottomLabel = pName(state, me4);
+      topLabel    = pName(state, other(me4));
+      rivalSrcForIntro =
+        srcFromFirebaseAvatar(_lastRoom?.avatars?.[K(other(me4))]) || AVATAR_IMAGES[0];
+    }
+
     Promise.resolve()
       .then(() =>
         playVersusIntro(
-          pName(state, session.mySeat),
-          pName(state, other(session.mySeat)),
+          bottomLabel,
+          topLabel,
           _vsMineSrc,
-          _vsRivalSrc,
+          rivalSrcForIntro,
         ),
       )
       .catch(() => {})
@@ -1648,17 +1814,31 @@ export function renderAll(room) {
       const st = _lastState;
       if (!st || st.status !== "game_over") return;
       _gameEndSummaryLatch = false;
-      const iWon = st.winner === session.mySeat;
+      // In 2v2 state.winner is the team index (0 or 1); in 1v1 it equals the seat.
+      const n2v2 = getNumSeats(st);
+      const iWon = n2v2 === 4
+        ? teamOf(session.mySeat) === st.winner
+        : st.winner === session.mySeat;
       const aband = st.gameEndReason === "abandonment";
       $("gameOverOverlay").classList.remove("hidden");
       $("goTitle").textContent = iWon ? "\ud83c\udfc6 Has guanyat!" : "\ud83d\ude05 Has perdut";
-      $("goWinner").textContent = pName(st, st.winner) + " guanya";
+      // Winner label: in 2v2 show both team members
+      if (n2v2 === 4 && st.winner !== undefined) {
+        const winnerTeam = st.winner; // 0 or 1
+        const wSeats = [0, 1, 2, 3].filter(s => teamOf(s) === winnerTeam);
+        const wNames = wSeats.map(s => pName(st, s)).filter(Boolean);
+        $("goWinner").textContent = wNames.join(" & ") + " guanyen";
+      } else {
+        $("goWinner").textContent = pName(st, st.winner) + " guanya";
+      }
+      const myTeamGO  = n2v2 === 4 ? teamOf(session.mySeat) : session.mySeat;
+      const rivTeamGO = myTeamGO === 0 ? 1 : 0;
       $("goScore").textContent =
         aband && iWon
           ? "Has guanyat per abandonament!"
           : aband && !iWon
-            ? "Has perdut per abandonament (temps de reconnexi\u00f3 esgotat)."
-            : `${getScore(st, session.mySeat)} - ${getScore(st, other(session.mySeat))}`;
+            ? "Has perdut per abandonament (temps de reconnexió esgotat)."
+            : `${getScore(st, myTeamGO)} - ${getScore(st, rivTeamGO)}`;
       if (iWon) {
         sndWin();
         vibratePattern(500);
@@ -1705,33 +1885,67 @@ export function renderAll(room) {
     if (real(state.handNumber || OFFSET) === 0) {
       _betweenCountdownLatch = false;
       stopBetween();
-      $("waitingCode").textContent = session.roomCode || "-";
+      const hideWaitingRoomCode =
+        session.roomVisibility === "public" || isBotActive();
+      $("waitingCode").textContent = hideWaitingRoomCode
+        ? ""
+        : session.roomCode || "-";
       const modo = state?.settings?.modoJuego === "2v2" ? "2v2" : "1v1";
       const pts = Number(state?.settings?.puntosParaGanar) === 24 ? 24 : 12;
       const modeTag = $("waitingModeTag");
       const ptsTag = $("waitingPtsTag");
       if (modeTag) modeTag.innerHTML = `${ICO_USER}<span>${modo}</span>`;
       if (ptsTag) ptsTag.innerHTML = `${ICO_STONE}<span>${pts} pedres</span>`;
-      $("waitingInviteWhatsappBtn")?.classList.toggle("hidden", isBotActive());
-      $("waitingCodeRow")?.classList.toggle(
-        "hidden",
-        session.roomVisibility === "public",
-      );
+      const numSeats = getNumSeats(state);
+      const is2v2 = numSeats === 4;
+
+      // In 2v2 the WhatsApp button is inside slot-player-1 which already has a player;
+      // move it below the faceoff section to avoid overlapping the slot card.
+      const waBtn = $("waitingInviteWhatsappBtn");
+      if (waBtn) {
+        waBtn.classList.toggle("hidden", isBotActive());
+        if (is2v2 && !isBotActive()) {
+          // Reattach below the faceoff div so it doesn't cover slot-player-1
+          const faceoff = $("waitingFaceoff");
+          const actions = document.querySelector(".waiting-actions");
+          if (faceoff && actions && waBtn.parentElement !== faceoff.parentElement) {
+            faceoff.parentElement?.insertBefore(waBtn, actions);
+          }
+        }
+      }
+      $("waitingCodeRow")?.classList.toggle("hidden", hideWaitingRoomCode);
       const p0ready = !!state.ready?.[K(0)];
       const p1ready = !!state.ready?.[K(1)];
-      const myReady = session.mySeat === 0 ? p0ready : p1ready;
-      const bothFirebaseReady = p0ready && p1ready;
+      const myReady = !!state.ready?.[K(session.mySeat)];
+      let allFirebaseReady = true;
+      for (let i = 0; i < numSeats; i++) {
+        if (!state.ready?.[K(i)]) { allFirebaseReady = false; break; }
+      }
       const isBotMatch = isBotActive();
-      const canStartMatch = isBotMatch ? bothJoined : bothFirebaseReady;
+      const canStartMatch = isBotMatch ? bothJoined : allFirebaseReady;
+
+      // Mostrar/ocultar slots 2 i 3 segons mode
+      const slot2 = $("slot-player-2");
+      const slot3 = $("slot-player-3");
+      if (slot2) slot2.classList.toggle("hidden", !is2v2);
+      if (slot3) slot3.classList.toggle("hidden", !is2v2);
+      const tlA = $("waitingTeamLabelA");
+      const tlB = $("waitingTeamLabelB");
+      if (tlA) tlA.classList.toggle("hidden", !is2v2);
+      if (tlB) tlB.classList.toggle("hidden", !is2v2);
 
       if (!bothJoined) {
-        $("waitingStatus").innerHTML =
-          'Esperant el segon jugador<span class="dots"></span>';
+        const nJoined = Object.keys(state.players || {}).length;
+        const missing = numSeats - nJoined;
+        $("waitingStatus").innerHTML = is2v2
+          ? `Esperant ${missing} jugador${missing > 1 ? "s" : ""}<span class="dots"></span>`
+          : 'Esperant el segon jugador<span class="dots"></span>';
       } else if (isBotMatch) {
         $("waitingStatus").textContent = "Rival preparat! Pots iniciar la partida.";
-      } else if (!bothFirebaseReady) {
-        $("waitingStatus").innerHTML =
-          'Cal que els dos confirmeu \u00abpreparat\u00bb<span class="dots"></span>';
+      } else if (!allFirebaseReady) {
+        $("waitingStatus").innerHTML = is2v2
+          ? 'Cal que tots confirmeu \u00abpreparat\u00bb<span class="dots"></span>'
+          : 'Cal que els dos confirmeu \u00abpreparat\u00bb<span class="dots"></span>';
       } else {
         $("waitingStatus").textContent =
           session.mySeat === 0
@@ -1744,13 +1958,13 @@ export function renderAll(room) {
         const sB = $("startBtn");
         sB.disabled = !canStartMatch;
         sB.title = !canStartMatch
-          ? "Cal que els dos jugadors estiguen preparats"
+          ? "Cal que tots els jugadors estiguen preparats"
           : "";
         sB.style.opacity = !canStartMatch ? "0.5" : "1";
         sB.style.cursor = !canStartMatch ? "not-allowed" : "pointer";
         $("hostReadyBtn").classList.toggle(
           "hidden",
-          isBotMatch || !bothJoined || p0ready,
+          isBotMatch || !bothJoined || myReady,
         );
         $("guestReadyBtn").classList.add("hidden");
         $("guestWaitMsg").classList.add("hidden");

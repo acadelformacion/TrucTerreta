@@ -46,6 +46,7 @@ import {
   openCreateRoomModal,
   openPrivateCodeModal,
   configureLobby,
+  changeSeat,
 } from "./lobby.js";
 import { sndBtn } from "./audio.js";
 import {
@@ -60,6 +61,13 @@ import {
   onGameViewportChange,
   initPhraseListener,
   detachChatListeners,
+  initLobbyChat,
+  sendLobbyChat,
+  detachLobbyChatListeners,
+  toggleGameEmojiPicker,
+  closeGameEmojiPicker,
+  toggleLobbyEmojiPicker,
+  closeLobbyEmojiPicker,
 } from "./chat.js";
 import {
   myAvatarChoice,
@@ -152,7 +160,11 @@ const getPlayed = (h, seat) => {
   return v && v !== EMPTY_CARD ? v : null;
 };
 const alreadyPlayed = (h, seat) => getPlayed(h, seat) !== null;
-const bothPlayed = (h) => alreadyPlayed(h, 0) && alreadyPlayed(h, 1);
+const allPlayed = (h) => {
+  const n = h?.numSeats || 2;
+  for (let i = 0; i < n; i++) { if (!alreadyPlayed(h, i)) return false; }
+  return true;
+};
 
 const LS = { room: "truc_room", seat: "truc_seat", name: "truc_name" };
 const ANON_NICK_STORAGE_PREFIX = "truc_anon_nick_";
@@ -313,6 +325,7 @@ export function startSession(code) {
 
   initChat(code);
   initPhraseListener(code);
+  initLobbyChat(code);
 
   if (unsubMsg) unsubMsg();
   let lastMsgAt = 0;
@@ -349,6 +362,7 @@ export function detachRoomListeners() {
     unsubMsg = null;
   }
   detachChatListeners();
+  detachLobbyChatListeners();
   cancelPreGameRoomOnDisconnect();
   clearAbsenceTimers();
 }
@@ -691,6 +705,36 @@ export function initApp() {
   $("chatInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendChat();
   });
+  // Botó emoji del chat de partida
+  $("gameEmojiBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleGameEmojiPicker();
+  });
+  // Tancar emoji picker de partida en clic fora
+  document.addEventListener("click", (e) => {
+    const picker = $("gameEmojiPicker");
+    const btn = $("gameEmojiBtn");
+    if (picker && !picker.contains(e.target) && e.target !== btn) {
+      closeGameEmojiPicker();
+    }
+  });
+  // Chat pre-partida (lobby/waiting)
+  $("lobbyEmojiBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleLobbyEmojiPicker();
+  });
+  $("lobbyChat_Send")?.addEventListener("click", sendLobbyChat);
+  $("lobbyChatInput")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); sendLobbyChat(); }
+  });
+  // Tancar emoji picker de lobby en clic fora
+  document.addEventListener("click", (e) => {
+    const picker = $("lobbyEmojiPicker");
+    const btn = $("lobbyEmojiBtn");
+    if (picker && !picker.contains(e.target) && e.target !== btn) {
+      closeLobbyEmojiPicker();
+    }
+  });
   document.querySelectorAll(".av-opt").forEach((el) => {
     el.addEventListener("click", () => {
       const raw = el.dataset.av;
@@ -702,6 +746,24 @@ export function initApp() {
       }
     });
   });
+  
+  // Botons "Sentar-se ací" per al 2v2
+  [0, 1, 2, 3].forEach(seatIndex => {
+    const btn = document.getElementById(`waitSlotSitBtn${seatIndex}`);
+    if (btn) {
+      btn.addEventListener("click", async () => {
+        if (ui.locked) return;
+        ui.locked = true;
+        sndBtn();
+        try {
+          await changeSeat(seatIndex);
+        } finally {
+          ui.locked = false;
+        }
+      });
+    }
+  });
+
   loadAvatarChoiceIntoMemory();
   updateAvatarOptionRowsVisibility();
   applyAvatarSelectionVisualOnly();

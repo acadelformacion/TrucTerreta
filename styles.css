@@ -4168,3 +4168,722 @@ body.btn-large #actionBtns {
     background: inherit;
   }
 }
+
+/* ═══════════════════════════════════════
+   2v2 MODE — Disposició en creu
+   ═══════════════════════════════════════ */
+
+/* Table en mode 2v2: CSS Grid en creu */
+#table.table-2v2 {
+  display: grid !important;
+  grid-template-areas:
+    ". teammate ."
+    "rival-left center rival-right"
+    ". player .";
+  grid-template-columns: minmax(60px, 120px) 1fr minmax(60px, 120px);
+  grid-template-rows: auto 1fr auto;
+  align-items: center !important;
+  justify-items: center;
+  gap: 4px;
+}
+#table.table-2v2 #rivalZone       { grid-area: rival-left; }
+#table.table-2v2 #rivalRightZone  { grid-area: rival-right; }
+#table.table-2v2 #teammateZone    { grid-area: teammate; }
+#table.table-2v2 #centerZone      { grid-area: center; }
+#table.table-2v2 #myZone          { grid-area: player; }
+#table.table-2v2 #deckPile        { display: none; }
+
+/* Zones laterals (rivals esquerra/dreta) */
+.side-player-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 1;
+}
+.side-player-zone.hidden { display: none !important; }
+
+.side-player-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.side-player-header .player-name {
+  font-size: 13px !important;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cards laterals: més petites, apilades vertical */
+.side-cards {
+  position: relative;
+  height: 90px;
+  width: 60px;
+}
+.side-cards .rival-card-slot {
+  margin-left: -28px !important;
+}
+.side-cards .card-back {
+  width: 52px;
+  height: 78px;
+}
+
+/* Zona company (dalt) */
+.teammate-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 1;
+}
+.teammate-zone.hidden { display: none !important; }
+
+.teammate-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.teammate-header .player-name {
+  font-size: 14px !important;
+}
+
+.teammate-cards {
+  position: relative;
+  height: 80px;
+  min-width: 120px;
+}
+
+/* Trick grid: 2 cartes per fila en 2v2 */
+.trick-col-4p .trick-cell-rival,
+.trick-col-4p .trick-cell-mine {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.trick-col-4p .playing-card {
+  width: 62px;
+  height: 90px;
+}
+@media (min-width: 768px) {
+  .trick-col-4p .playing-card {
+    width: 90px;
+    height: 135px;
+  }
+}
+
+/* ── Waiting overlay 2v2 ── */
+.waiting-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.waiting-team-label {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--gold);
+  text-shadow: 0 0 8px var(--gold-glow);
+}
+.waiting-team-label.hidden { display: none !important; }
+.waiting-team-slots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ═══════════════════════════════════════
+   FASE 5b — CSS POLISH 2v2
+   ═══════════════════════════════════════ */
+
+/* ── Variables d'equip ── */
+:root {
+  --team-a: #4caf7d;          /* verd equip A */
+  --team-a-glow: rgba(76,175,125,0.28);
+  --team-b: #5b9bd5;          /* blau equip B */
+  --team-b-glow: rgba(91,155,213,0.28);
+}
+
+/* ── Layout: refinament del grid en creu ── */
+#table.table-2v2 {
+  grid-template-columns: minmax(68px, 110px) 1fr minmax(68px, 110px);
+  grid-template-rows: auto 1fr auto;
+  gap: 6px 4px;
+  padding: 6px 4px;
+}
+
+/* ── Zones laterals: orientació vertical ── */
+.side-player-zone {
+  max-width: 110px;
+  width: 100%;
+  transition: filter 0.25s ease;
+}
+
+/* Cards laterals: pila vertical compacta */
+.side-cards {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 60px;
+  width: 52px;
+  gap: -22px;           /* apilat visual */
+}
+.side-cards .rival-card-slot {
+  margin-top: -26px !important;
+  margin-left: 0 !important;
+}
+.side-cards .rival-card-slot:first-child {
+  margin-top: 0 !important;
+}
+.side-cards .card-back {
+  width: 46px;
+  height: 69px;
+}
+
+/* Nom del jugador lateral: truncat */
+.side-player-header .player-name {
+  font-size: 12px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+  text-align: center;
+}
+
+/* ── Avatar petit per als laterals ── */
+#table.table-2v2 .side-player-zone .player-av-sm {
+  width: 36px;
+  height: 36px;
+}
+
+/* ── Company (dalt): semblant al rival però centrat ── */
+.teammate-zone {
+  max-width: 240px;
+  width: 100%;
+}
+.teammate-cards {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  min-height: 70px;
+  height: auto;
+  min-width: 80px;
+  gap: -18px;
+}
+.teammate-cards .rival-card-slot {
+  margin-left: -20px !important;
+}
+.teammate-cards .rival-card-slot:first-child {
+  margin-left: 0 !important;
+}
+.teammate-cards .card-back {
+  width: 46px;
+  height: 69px;
+}
+.teammate-header .player-name {
+  font-size: 13px !important;
+  text-align: center;
+}
+
+/* ── Indicador de torn: zona activa brilla ── */
+@keyframes zone-pulse-a {
+  0%, 100% { box-shadow: 0 0 0 2px transparent; }
+  50%       { box-shadow: 0 0 0 2px var(--team-a), 0 0 18px var(--team-a-glow); }
+}
+@keyframes zone-pulse-b {
+  0%, 100% { box-shadow: 0 0 0 2px transparent; }
+  50%       { box-shadow: 0 0 0 2px var(--team-b), 0 0 18px var(--team-b-glow); }
+}
+@keyframes zone-pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 2px transparent; }
+  50%       { box-shadow: 0 0 0 2px var(--gold), 0 0 18px var(--gold-glow); }
+}
+
+/* Zones que poden tenir el torn actiu en 2v2 */
+#table.table-2v2 #rivalZone,
+#table.table-2v2 #rivalRightZone,
+#table.table-2v2 #teammateZone,
+#table.table-2v2 #myZone {
+  border-radius: 12px;
+  transition:
+    box-shadow 0.3s ease,
+    opacity 0.3s ease;
+}
+
+/* Classe JS que renderGame aplica al jugador amb el torn */
+#table.table-2v2 .zone-active-turn {
+  animation: zone-pulse-gold 1.4s ease-in-out infinite;
+}
+/* Per equips (si es volen colors distincts) */
+#table.table-2v2 .zone-active-turn.team-a {
+  animation: zone-pulse-a 1.4s ease-in-out infinite;
+}
+#table.table-2v2 .zone-active-turn.team-b {
+  animation: zone-pulse-b 1.4s ease-in-out infinite;
+}
+
+/* Zones inactives: lleugerament apagades */
+#table.table-2v2 .zone-waiting {
+  opacity: 0.65;
+}
+
+/* ── Trick grid 4p: columna amb 4 cartes ── */
+.trick-col-4p {
+  gap: 4px;
+}
+.trick-col-4p .trick-cell-rival,
+.trick-col-4p .trick-cell-mine {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.trick-col-4p .playing-card {
+  width: 58px;
+  height: 87px;
+  flex-shrink: 0;
+}
+
+/* ── Waiting overlay 2v2: etiquetes d'equip ── */
+[data-mode="2v2"] .waiting-faceoff {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+[data-mode="2v2"] .waiting-team-label {
+  display: block !important;
+}
+.waiting-team-a .waiting-team-label {
+  color: var(--team-a);
+  text-shadow: 0 0 8px var(--team-a-glow);
+}
+.waiting-team-b .waiting-team-label {
+  color: var(--team-b);
+  text-shadow: 0 0 8px var(--team-b-glow);
+}
+[data-mode="2v2"] #slot-player-2,
+[data-mode="2v2"] #slot-player-3 {
+  display: flex !important;
+}
+
+/* Slot de jugador en espera: indicator d'equip */
+[data-mode="2v2"] .waiting-team-a .player-wait-slot {
+  border-left: 3px solid var(--team-a);
+  padding-left: 8px;
+}
+[data-mode="2v2"] .waiting-team-b .player-wait-slot {
+  border-left: 3px solid var(--team-b);
+  padding-left: 8px;
+}
+
+/* Nom de l'equip al HUD en 2v2 */
+[data-mode="2v2"] #hud .hud-score-num:first-of-type::before {
+  content: "A: ";
+  font-size: 0.7em;
+  opacity: 0.75;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+[data-mode="2v2"] #hud .hud-score-num:last-of-type::before {
+  content: "B: ";
+  font-size: 0.7em;
+  opacity: 0.75;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+/* ── Responsive: mòbil (< 480 px) ── */
+@media (max-width: 480px) {
+  #table.table-2v2 {
+    grid-template-columns: minmax(52px, 80px) 1fr minmax(52px, 80px);
+    gap: 4px 2px;
+    padding: 4px 2px;
+  }
+  .side-cards {
+    width: 44px;
+  }
+  .side-cards .card-back {
+    width: 40px;
+    height: 60px;
+  }
+  .side-player-header .player-name {
+    font-size: 10px !important;
+    max-width: 72px;
+  }
+  #table.table-2v2 .side-player-zone .player-av-sm {
+    width: 28px;
+    height: 28px;
+  }
+  .teammate-cards .card-back {
+    width: 40px;
+    height: 60px;
+  }
+  .trick-col-4p .playing-card {
+    width: 44px;
+    height: 66px;
+  }
+}
+
+/* ── Responsive: tauleta (480–768 px) ── */
+@media (min-width: 481px) and (max-width: 767px) {
+  #table.table-2v2 {
+    grid-template-columns: minmax(64px, 100px) 1fr minmax(64px, 100px);
+    gap: 5px 3px;
+  }
+  .trick-col-4p .playing-card {
+    width: 56px;
+    height: 84px;
+  }
+}
+
+/* ── WhatsApp button when reattached outside the slot in 2v2 ── */
+[data-mode="2v2"] .waiting-invite-side-btn {
+  display: flex;
+  align-self: center;
+  margin: 10px auto 0;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(37, 211, 102, 0.45);
+  background: rgba(37, 211, 102, 0.1);
+  color: rgba(232, 249, 233, 0.95);
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+[data-mode="2v2"] .waiting-invite-side-btn:hover {
+  background: rgba(37, 211, 102, 0.2);
+  border-color: rgba(37, 211, 102, 0.7);
+}
+
+/* ── Responsive: escriptori (≥ 768 px) ── */
+@media (min-width: 768px) {
+  #table.table-2v2 {
+    grid-template-columns: minmax(90px, 130px) 1fr minmax(90px, 130px);
+    gap: 8px 6px;
+  }
+  .side-cards {
+    width: 58px;
+  }
+  .side-cards .card-back {
+    width: 52px;
+    height: 78px;
+  }
+  .trick-col-4p .playing-card {
+    width: 80px;
+    height: 120px;
+  }
+  #table.table-2v2 .side-player-zone .player-av-sm {
+    width: 42px;
+    height: 42px;
+  }
+  .teammate-cards .card-back {
+    width: 52px;
+    height: 78px;
+  }
+}
+
+
+
+/* ---------------------------------------
+   CHAT MILLORES � emojis + lobby
+   --------------------------------------- */
+
+/* --- Animaci� del bot� Xat quan hi ha missatge nou --- */
+@keyframes chatPing {
+  0%   { transform: scale(1) rotate(0deg); }
+  15%  { transform: scale(1.18) rotate(-8deg); }
+  30%  { transform: scale(1.14) rotate(7deg); }
+  45%  { transform: scale(1.1) rotate(-5deg); }
+  60%  { transform: scale(1.06) rotate(3deg); }
+  75%  { transform: scale(1.03) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.chat-toggle--ping {
+  animation: chatPing 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  border-color: var(--gold) !important;
+  color: var(--gold) !important;
+}
+.chat-toggle--ping .chat-toggle-icon {
+  display: inline-block;
+  animation: chatPing 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.chat-toggle-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+.chat-toggle-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* --- Bot� emoji dins del chat de partida --- */
+.chat-emoji-btn {
+  flex: 0 0 34px;
+  min-width: 34px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 17px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.chat-emoji-btn:hover { opacity: 1; transform: scale(1.15); }
+
+/* --- Picker emojis rpids (partida) --- */
+.game-emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(8, 18, 12, 0.98);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  justify-content: center;
+  animation: ovIn 0.15s ease both;
+}
+.game-emoji-picker.hidden { display: none !important; }
+
+/* Botó emoji compartit */
+.emoji-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 20px;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  padding: 0;
+}
+.emoji-btn:hover, .emoji-btn:active {
+  background: var(--gold-glow);
+  border-color: var(--gold);
+  transform: scale(1.2);
+}
+
+/* -------------------------------------------------
+   CHAT LOBBY / PRE-PARTIDA
+   ------------------------------------------------- */
+.lobby-chat-panel {
+  width: 100%;
+  max-width: 540px;
+  margin: 12px auto 0;
+  border-radius: 14px;
+  background: rgba(8, 18, 12, 0.88);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  flex: 1 1 auto;
+  min-height: 140px;
+}
+.lobby-chat-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+}
+.lobby-chat-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--gold);
+  opacity: 0.88;
+}
+.lobby-chat-messages {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 60px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.lc-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  animation: lc-msg-in 0.2s ease both;
+}
+@keyframes lc-msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.lc-msg .lc-author {
+  font-weight: 800;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.lc-msg.mine .lc-author  { color: var(--gold); }
+.lc-msg.theirs .lc-author { color: #7ee787; }
+.lc-msg .lc-text {
+  color: var(--text);
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
+}
+.lc-msg .lc-time {
+  font-size: 10px;
+  color: var(--dim);
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+.lobby-emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 8px 10px;
+  background: rgba(8, 18, 12, 0.98);
+  border-top: 1px solid var(--border);
+  justify-content: flex-start;
+  animation: ovIn 0.15s ease both;
+  max-height: 120px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.lobby-emoji-picker.hidden { display: none !important; }
+.lobby-emoji-picker .emoji-btn { width: 34px; height: 34px; font-size: 18px; }
+
+.lobby-chat-input-row {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+.lobby-chat-emoji-btn {
+  flex: 0 0 40px;
+  min-width: 40px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.75;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.lobby-chat-emoji-btn:hover { opacity: 1; transform: scale(1.15); }
+
+.lobby-chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  min-width: 0;
+}
+.lobby-chat-input::placeholder { color: var(--dim); }
+
+.lobby-chat-send {
+  flex: 0 0 46px;
+  min-width: 46px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gold);
+  color: #0b1512;
+  border: none;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  border-left: 1px solid rgba(0,0,0,0.2);
+}
+.lobby-chat-send:hover { opacity: 0.85; }
+
+@media (max-width: 520px) {
+  .lobby-chat-messages { min-height: 40px; }
+  .lobby-chat-panel { margin-top: 8px; border-radius: 10px; min-height: 100px; }
+  .lobby-emoji-picker .emoji-btn { width: 30px; height: 30px; font-size: 16px; }
+}
+@media (hover: none) {
+  .chat-emoji-btn:hover,
+  .lobby-chat-emoji-btn:hover,
+#waitingOverlay .waiting-faceoff-card > * {
+  flex-shrink: 0;
+}
+
+/* Ensure overlay items do not shrink to zero and cause UI to disappear */
+#waitingOverlay .avatar-pick,
+#waitingOverlay .waiting-actions,
+#waitingOverlay .waiting-status {
+  flex-shrink: 0;
+}
+#waitingOverlay .waiting-faceoff-card {
+  overflow-y: auto;
+}
+#waitingOverlay .lobby-chat-panel {
+  flex: 0 1 auto;
+  min-height: 80px;
+  max-height: 200px;
+}
+
+/* ── Botó "Sentar-se ací" en espais buits (2v2) ── */
+.sit-here-btn {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #0b1512;
+  border: none;
+  cursor: pointer;
+  font-weight: 800;
+  text-transform: uppercase;
+  transition: transform 0.15s, opacity 0.15s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  margin-top: 4px;
+}
+.sit-here-btn:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+.sit-here-btn.hidden {
+  display: none !important;
+}
