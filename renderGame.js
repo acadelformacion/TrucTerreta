@@ -594,12 +594,29 @@ function renderPlayerZone(zoneEl, handObj) {
 }
 
 /**
+ * Per a 2v2 (4 seients), retorna [rivalDret, rivalEsquerra] en ordre CCW des de `me`.
+ * - rivalDret  = primer rival trobat anant CCW (a la dreta del jugador)
+ * - rivalEsquerra = segon rival trobat anant CCW (a l'esquerra del jugador)
+ *
+ * Càlcul: seients en disposició horària (0=S,1=W,2=N,3=E);
+ * CCW des de 0: [3,2,1] → first rival=3(E=dreta), second rival=1(W=esquerra) ✓
+ */
+function _ccwRivals(me) {
+  const rivals = [];
+  for (let i = 1; i < 4; i++) {
+    const s = (me - i + 4) % 4;
+    if (teamOf(s) !== teamOf(me)) rivals.push(s);
+  }
+  return rivals; // [rivalDret, rivalEsquerra]
+}
+
+/**
  * Mapeja cada seat (que no siga el meu) a la seua zona HTML.
  * 1v1: rival → #rivalCards (com abans)
  * 2v2 creu:
- *   - Company (teammate) → #teammateCards (dalt)
- *   - Rival esquerra → #rivalCards (esquerra)
- *   - Rival dret → #rivalRightCards (dreta)
+ *   - Company (teammate) → #teammateCards (dalt, seient oposat)
+ *   - Rival dret (primer CCW) → #rivalRightCards (dreta)
+ *   - Rival esquerra (segon CCW) → #rivalCards (esquerra)
  */
 function renderRivalZones(state) {
   const n = getNumSeats(state);
@@ -632,27 +649,21 @@ function renderRivalZones(state) {
     return;
   }
 
-  // 2v2: determinar seats relatius
+  // 2v2: company sempre al seient oposat (me+2)%4
   const me = session.mySeat;
-  const myTeam = teamOf(me);
-  const tm = teammates(me).filter(s => s !== me);
-  const opps = opponents(me);
-
-  // Company (teammate) → dalt
-  const tmSeat = tm[0] ?? -1;
+  const tmSeat = (me + 2) % 4;
   renderPlayerZone($("teammateCards"), state.hand?.hands?.[K(tmSeat)]);
   const tn = $("teammateName");
-  if (tn) tn.textContent = tmSeat >= 0 ? pName(state, tmSeat) : "—";
+  if (tn) tn.textContent = pName(state, tmSeat);
 
-  // Rivals → esquerra (rivalCards) i dreta (rivalRightCards)
-  const rivalL = opps[0] ?? -1;
-  const rivalR = opps[1] ?? -1;
+  // Rivals: [rivalDret, rivalEsquerra] en ordre CCW
+  const [rivalR, rivalL] = _ccwRivals(me);
   renderPlayerZone($("rivalCards"), state.hand?.hands?.[K(rivalL)]);
   renderPlayerZone($("rivalRightCards"), state.hand?.hands?.[K(rivalR)]);
   const rn = $("rivalName");
-  if (rn) rn.textContent = rivalL >= 0 ? pName(state, rivalL) : "—";
+  if (rn) rn.textContent = pName(state, rivalL);
   const rrn = $("rivalRightName");
-  if (rrn) rrn.textContent = rivalR >= 0 ? pName(state, rivalR) : "—";
+  if (rrn) rrn.textContent = pName(state, rivalR);
 }
 
 export function resetHandIntroPlayed() {
@@ -818,11 +829,41 @@ function _renderTrickGrid(allTricks, playedMap, numSeats, didRivalJustPlay = fal
   const buildTrickCol = (getCard, winner, isCurrent, justPlayed) => {
     const col = document.createElement("div");
     col.className = "trick-col";
-    if (numSeats === 4) col.classList.add("trick-col-4p");
     const isDraw = winner === 99 || winner === null || winner === undefined;
     if (isDraw && !isCurrent) col.classList.add("trick-draw");
 
-    // Fila rivals (dalt)
+    if (numSeats === 4) {
+      // 2v2: disposició en CREU — 4 posicions relatives al jugador local
+      col.classList.add("trick-col-4p");
+      const tmSeat  = (me + 2) % 4;           // company: seient oposat
+      const [rivalR, rivalL] = _ccwRivals(me); // dret=primer CCW, esquerra=segon CCW
+      const positions = [
+        { seat: tmSeat,  cls: "trick-pos-top"    },
+        { seat: rivalL,  cls: "trick-pos-left"   },
+        { seat: rivalR,  cls: "trick-pos-right"  },
+        { seat: me,      cls: "trick-pos-bottom" },
+      ];
+      for (const { seat, cls } of positions) {
+        const cell = document.createElement("div");
+        cell.className = cls;
+        const code = getCard(seat);
+        if (code && code !== EMPTY_CARD) {
+          const el = buildCard(code);
+          // winner és índex d'equip (0|1|99); teamOf(seat) diu a quin equip pertany
+          if (!isDraw && !isCurrent && winner !== undefined && teamOf(seat) === winner)
+            el.classList.add("trick-winner");
+          globalThis.gsap?.set(el, { rotationX: 25, transformPerspective: 400 });
+          const isRival = teamOf(seat) !== myTeam;
+          if (isCurrent && justPlayed && isRival) animateRivalPlay(el);
+          else if (isCurrent) el.classList.add("land-anim");
+          cell.appendChild(el);
+        }
+        col.appendChild(cell);
+      }
+      return col;
+    }
+
+    // 1v1: disposició original (rival dalt, meua baix)
     const cellRival = document.createElement("div");
     cellRival.className = "trick-cell-rival";
     for (let s = 0; s < numSeats; s++) {
@@ -842,7 +883,6 @@ function _renderTrickGrid(allTricks, playedMap, numSeats, didRivalJustPlay = fal
     const sep = document.createElement("div");
     sep.className = "trick-row-sep";
 
-    // Fila meua (baix)
     const cellMine = document.createElement("div");
     cellMine.className = "trick-cell-mine";
     for (let s = 0; s < numSeats; s++) {
@@ -883,7 +923,7 @@ function renderTrickSnapshot(snapshot) {
   const key = "snap|" + snapshot.key;
   if (key === _prevTrickKey) return;
   _prevTrickKey = key;
-  _renderTrickGrid(snapshot.allTricks, {}, 2);
+  _renderTrickGrid(snapshot.allTricks, {}, snapshot.numSeats || 2);
 }
 
 function renderTrick(state) {
@@ -1345,19 +1385,19 @@ function updateRivalTimer(state) {
 
   // 2v2 path — use zone-active-turn / zone-waiting + team color hints
   const me = session.mySeat;
-  const tm = teammates(me).find(s => s !== me) ?? -1;
-  const opps = opponents(me);
+  const tm = (me + 2) % 4; // company sempre al seient oposat
+  const [rivalR, rivalL] = _ccwRivals(me); // dret=primer CCW, esquerra=segon CCW
 
   /** seat → zone element */
   const seatZone = (seat) => {
     if (seat === me)       return $("myZone");
     if (seat === tm)       return $("teammateZone");
-    if (seat === opps[0])  return $("rivalZone");
-    if (seat === opps[1])  return $("rivalRightZone");
+    if (seat === rivalL)   return $("rivalZone");       // rivalZone = esquerra
+    if (seat === rivalR)   return $("rivalRightZone");  // rivalRightZone = dreta
     return null;
   };
 
-  [me, tm, opps[0], opps[1]].forEach(seat => {
+  [me, tm, rivalL, rivalR].forEach(seat => {
     const el = seatZone(seat);
     if (!el) return;
     const isActive = playing && activeSeat === seat && !alreadyPlayed(h, seat);
@@ -1470,7 +1510,7 @@ function checkPresence(state) {
   }
   // In 2v2 check presence of the first opponent; in 1v1 check the single rival
   const presenceSeat = getNumSeats(state) === 4
-    ? opponents(session.mySeat)[0]
+    ? opponents(session.mySeat, state)[0]
     : other(session.mySeat);
   get(ref(db, `rooms/${session.roomCode}/presence/${K(presenceSeat)}`))
     .then((snap) => {
@@ -1622,7 +1662,7 @@ export function renderAll(room) {
     state.status !== "game_over"
   ) {
     const n2 = getNumSeats(state);
-    const opps2 = n2 === 4 ? opponents(session.mySeat) : [other(session.mySeat)];
+    const opps2 = n2 === 4 ? opponents(session.mySeat, state) : [other(session.mySeat)];
     const allOpponentsGone = opps2.every(s => !state.players?.[K(s)]);
     if (allOpponentsGone) {
       if (!_claimMissingRivalPending) {
@@ -1675,22 +1715,23 @@ export function renderAll(room) {
     const me4 = session.mySeat;
     const _vsMineSrc = srcFromChoice(myAvatarChoice) || AVATAR_IMAGES[0];
 
-    let bottomLabel, topLabel, rivalSrcForIntro;
+    let bottomLabel, topLabel, rivalSrcForIntro, mineSrc2ForIntro = "", rivalSrc2ForIntro = "";
     if (is2v2intro) {
       // Bottom band: my team (me + teammate)
-      const tm4 = teammates(me4).filter(s => s !== me4);
-      const tmName = tm4.length ? pName(state, tm4[0]) : "";
-      bottomLabel = tmName
-        ? `${pName(state, me4)} & ${tmName}`
-        : pName(state, me4);
+      const tmSeat4 = (me4 + 2) % 4; // company al seient oposat
+      bottomLabel = `${pName(state, me4)} & ${pName(state, tmSeat4)}`;
       // Top band: opponent team names
-      const opps4 = opponents(me4);
-      const opp0Name = opps4[0] >= 0 ? pName(state, opps4[0]) : "—";
-      const opp1Name = opps4[1] >= 0 ? pName(state, opps4[1]) : "";
+      const opps4 = opponents(me4, state);
+      const opp0Name = pName(state, opps4[0]);
+      const opp1Name = opps4[1] !== undefined ? pName(state, opps4[1]) : "";
       topLabel = opp1Name ? `${opp0Name} & ${opp1Name}` : opp0Name;
       // Avatar: use first opponent's avatar
       rivalSrcForIntro =
         srcFromFirebaseAvatar(_lastRoom?.avatars?.[K(opps4[0])]) || AVATAR_IMAGES[0];
+      mineSrc2ForIntro =
+        srcFromFirebaseAvatar(_lastRoom?.avatars?.[K(tmSeat4)]) || AVATAR_IMAGES[0];
+      rivalSrc2ForIntro =
+        srcFromFirebaseAvatar(_lastRoom?.avatars?.[K(opps4[1])]) || AVATAR_IMAGES[0];
     } else {
       bottomLabel = pName(state, me4);
       topLabel    = pName(state, other(me4));
@@ -1705,6 +1746,8 @@ export function renderAll(room) {
           topLabel,
           _vsMineSrc,
           rivalSrcForIntro,
+          mineSrc2ForIntro,
+          rivalSrc2ForIntro,
         ),
       )
       .catch(() => {})
@@ -1783,15 +1826,17 @@ export function renderAll(room) {
   renderRivalZones(state);
   updateRivalTimer(state);
   renderMyCards(state);
+  const _ns = getNumSeats(state);
   if (state.hand) {
     _lastCompletedTricks = {
       allTricks: state.hand.allTricks || [],
       key: real(state.handNumber || OFFSET) + "-" + Logica.getTrickIndex(state.hand),
+      numSeats: state.hand.numSeats || _ns,
     };
   } else if (state.lastAllTricks && state.lastAllTricks.length > 0) {
     const lk = "lat-" + state.lastAllTricks.length + "-" + state.handNumber;
     if (_lastCompletedTricks?.key !== lk) {
-      _lastCompletedTricks = { allTricks: state.lastAllTricks, key: lk };
+      _lastCompletedTricks = { allTricks: state.lastAllTricks, key: lk, numSeats: _ns };
     }
   }
   if (!state.hand && _lastCompletedTricks) {

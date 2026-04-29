@@ -154,7 +154,14 @@ export async function animateHUDPoints(id, targetValue, hudIdx) {
 
 // --- Intro VS (GSAP) ----------------------------------------------------------
 // mineSrc i rivalSrc es passen des del cridador per evitar dependència de avatars.js
-export function playVersusIntro(myName, rivalName, mineSrc, rivalSrc) {
+export function playVersusIntro(
+  myName,
+  rivalName,
+  mineSrc,
+  rivalSrc,
+  mineSrc2 = "",
+  rivalSrc2 = "",
+) {
   const gsapLib = globalThis.gsap;
   const overlay = $("versusOverlay");
   const topBanner = $("vsBannerTop");
@@ -163,7 +170,9 @@ export function playVersusIntro(myName, rivalName, mineSrc, rivalSrc) {
   const elRival = $("vsNameRival");
   const elMine = $("vsNameMine");
   const imgRival = $("vsAvatarRival");
+  const imgRival2 = $("vsAvatarRival2");
   const imgMine = $("vsAvatarMine");
+  const imgMine2 = $("vsAvatarMine2");
   if (!gsapLib || !overlay || !topBanner || !bottomBanner || !vsText) {
     return Promise.reject(
       new Error("playVersusIntro: falta GSAP o elements del DOM"),
@@ -178,6 +187,16 @@ export function playVersusIntro(myName, rivalName, mineSrc, rivalSrc) {
   if (imgRival) {
     imgRival.src = rivalSrc || "";
     imgRival.alt = rivalName != null ? String(rivalName) : "";
+  }
+  if (imgMine2) {
+    imgMine2.src = mineSrc2 || "";
+    imgMine2.alt = myName != null ? String(myName) : "";
+    imgMine2.classList.toggle("hidden", !mineSrc2);
+  }
+  if (imgRival2) {
+    imgRival2.src = rivalSrc2 || "";
+    imgRival2.alt = rivalName != null ? String(rivalName) : "";
+    imgRival2.classList.toggle("hidden", !rivalSrc2);
   }
 
   overlay.classList.remove("hidden");

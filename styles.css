@@ -1922,6 +1922,15 @@ body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   flex-shrink: 0;
 }
+#versusOverlay .versus-av-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+#versusOverlay .versus-av-group .versus-av.hidden {
+  display: none !important;
+}
 #versusOverlay .versus-name {
   font-size: max(2.5rem, clamp(2.5rem, 7vw, 4rem));
   font-weight: 900;
@@ -4256,22 +4265,62 @@ body.btn-large #actionBtns {
   min-width: 120px;
 }
 
-/* Trick grid: 2 cartes per fila en 2v2 */
-.trick-col-4p .trick-cell-rival,
-.trick-col-4p .trick-cell-mine {
-  display: flex;
+/* Trick grid 4p: disposició en CREU */
+.trick-col-4p {
+  display: grid;
+  grid-template-areas:
+    ". top ."
+    "left . right"
+    ". bottom .";
+  grid-template-columns: auto auto auto;
+  grid-template-rows: auto auto auto;
   gap: 4px;
-  justify-content: center;
+  align-items: center;
+  justify-items: center;
 }
+.trick-pos-top    { grid-area: top; }
+.trick-pos-left   { grid-area: left; }
+.trick-pos-right  { grid-area: right; }
+.trick-pos-bottom { grid-area: bottom; }
 .trick-col-4p .playing-card {
-  width: 62px;
-  height: 90px;
+  width: 46px;
+  height: 67px;
 }
 @media (min-width: 768px) {
   .trick-col-4p .playing-card {
-    width: 90px;
-    height: 135px;
+    width: 58px;
+    height: 85px;
   }
+}
+@media (min-width: 1024px) {
+  .trick-col-4p .playing-card {
+    width: 72px;
+    height: 105px;
+  }
+}
+
+/* ── 2v2: bazas apilades (2a i 3a sobreposades a la 1a) ── */
+[data-mode="2v2"] .trick-grid {
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-rows: auto;
+  align-items: start;
+  justify-items: center;
+  gap: 0;
+  min-height: unset;
+}
+[data-mode="2v2"] .trick-col {
+  grid-row: 1;
+  grid-column: 1;
+  padding-top: 5px;
+}
+[data-mode="2v2"] .trick-col:nth-child(1) { z-index: 1; }
+[data-mode="2v2"] .trick-col:nth-child(2) { z-index: 2; margin-top: 28px; }
+[data-mode="2v2"] .trick-col:nth-child(3) { z-index: 3; margin-top: 56px; }
+/* Ombra superior per marcar la separació visual entre bazas apilades */
+[data-mode="2v2"] .trick-col:nth-child(n+2) {
+  box-shadow: 0 -5px 10px rgba(0, 0, 0, 0.55);
+  border-radius: 8px;
 }
 
 /* ── Waiting overlay 2v2 ── */
@@ -4393,66 +4442,23 @@ body.btn-large #actionBtns {
   text-align: center;
 }
 
-/* ── Indicador de torn: zona activa brilla ── */
-@keyframes zone-pulse-a {
-  0%, 100% { box-shadow: 0 0 0 2px transparent; }
-  50%       { box-shadow: 0 0 0 2px var(--team-a), 0 0 18px var(--team-a-glow); }
-}
-@keyframes zone-pulse-b {
-  0%, 100% { box-shadow: 0 0 0 2px transparent; }
-  50%       { box-shadow: 0 0 0 2px var(--team-b), 0 0 18px var(--team-b-glow); }
-}
-@keyframes zone-pulse-gold {
-  0%, 100% { box-shadow: 0 0 0 2px transparent; }
-  50%       { box-shadow: 0 0 0 2px var(--gold), 0 0 18px var(--gold-glow); }
-}
-
 /* Zones que poden tenir el torn actiu en 2v2 */
 #table.table-2v2 #rivalZone,
 #table.table-2v2 #rivalRightZone,
 #table.table-2v2 #teammateZone,
 #table.table-2v2 #myZone {
   border-radius: 12px;
-  transition:
-    box-shadow 0.3s ease,
-    opacity 0.3s ease;
+  transition: opacity 0.3s ease;
 }
 
-/* Classe JS que renderGame aplica al jugador amb el torn */
-#table.table-2v2 .zone-active-turn {
-  animation: zone-pulse-gold 1.4s ease-in-out infinite;
-}
-/* Per equips (si es volen colors distincts) */
-#table.table-2v2 .zone-active-turn.team-a {
-  animation: zone-pulse-a 1.4s ease-in-out infinite;
-}
-#table.table-2v2 .zone-active-turn.team-b {
-  animation: zone-pulse-b 1.4s ease-in-out infinite;
-}
+#table.table-2v2 .zone-active-turn { opacity: 1; }
 
 /* Zones inactives: lleugerament apagades */
 #table.table-2v2 .zone-waiting {
   opacity: 0.65;
 }
 
-/* ── Trick grid 4p: columna amb 4 cartes ── */
-.trick-col-4p {
-  gap: 4px;
-}
-.trick-col-4p .trick-cell-rival,
-.trick-col-4p .trick-cell-mine {
-  display: flex;
-  flex-direction: row;
-  gap: 3px;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: nowrap;
-}
-.trick-col-4p .playing-card {
-  width: 58px;
-  height: 87px;
-  flex-shrink: 0;
-}
+/* ── Trick grid 4p: vegeu el bloc "Trick grid 4p: disposició en CREU" més amunt ── */
 
 /* ── Waiting overlay 2v2: etiquetes d'equip ── */
 [data-mode="2v2"] .waiting-faceoff {
@@ -4529,9 +4535,12 @@ body.btn-large #actionBtns {
     height: 60px;
   }
   .trick-col-4p .playing-card {
-    width: 44px;
-    height: 66px;
+    width: 40px;
+    height: 60px;
   }
+  /* Apilament 2v2 més ajustat en mòbil */
+  [data-mode="2v2"] .trick-col:nth-child(2) { margin-top: 20px; }
+  [data-mode="2v2"] .trick-col:nth-child(3) { margin-top: 40px; }
 }
 
 /* ── Responsive: tauleta (480–768 px) ── */
@@ -4867,22 +4876,36 @@ body.btn-large #actionBtns {
 
 /* ── Botó "Sentar-se ací" en espais buits (2v2) ── */
 .sit-here-btn {
-  font-size: 11px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--gold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  min-width: 132px;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffd65a 0%, #f2ba2e 100%);
   color: #0b1512;
-  border: none;
+  border: 1px solid rgba(0, 0, 0, 0.2);
   cursor: pointer;
   font-weight: 800;
   text-transform: uppercase;
-  transition: transform 0.15s, opacity 0.15s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  margin-top: 4px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.25);
+  margin-top: 6px;
+  touch-action: manipulation;
 }
 .sit-here-btn:hover {
-  transform: scale(1.05);
-  opacity: 0.9;
+  transform: translateY(-1px) scale(1.03);
+  filter: brightness(1.04);
+}
+.sit-here-btn:active {
+  transform: translateY(0) scale(0.99);
+}
+.sit-here-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 .sit-here-btn.hidden {
   display: none !important;
