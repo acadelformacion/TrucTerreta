@@ -272,19 +272,106 @@ function buildHandDealBack() {
 
 function bindMyCardPlayable(wrap, cel, card, myCardsZone) {
   wrap.classList.add("playable");
+  let played = false;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let hasTouchStart = false;
+  let isDragging = false;
+  let lastTouchPlayAt = 0;
+
+  const resetDragVisual = (instant = false) => {
+    cel.style.willChange = "";
+    cel.style.transition = instant ? "none" : "transform 160ms ease";
+    cel.style.transform = "";
+    if (!instant) {
+      setTimeout(() => {
+        if (!played) cel.style.transition = "";
+      }, 180);
+    }
+  };
+
+  const applyDragVisual = (dx, dy) => {
+    const visualX = Math.max(-26, Math.min(26, dx * 0.22));
+    const visualY = Math.max(-34, Math.min(10, dy * 0.32));
+    const up = Math.max(0, -dy);
+    const lift = Math.min(1, up / 70);
+    const scale = 1 + lift * 0.035;
+    const rot = Math.max(-5, Math.min(5, dx * 0.04));
+    cel.style.willChange = "transform";
+    cel.style.transition = "none";
+    cel.style.transform = `translate(${visualX}px, ${visualY}px) rotate(${rot}deg) scale(${scale})`;
+  };
+
+  const tryPlayCard = () => {
+    if (played || ui.locked || !wrap.classList.contains("playable")) return;
+    played = true;
+    resetDragVisual(true);
+    myCardsZone.querySelectorAll(".my-card-wrap").forEach((w) =>
+      w.classList.remove("playable"),
+    );
+    const randomSoundIndex = Math.floor(Math.random() * 15);
+    sndCard(randomSoundIndex);
+    animatePlay(cel, buildCard(card), () => playCard(card));
+  };
+
   wrap.addEventListener(
     "click",
     () => {
-      if (ui.locked || !wrap.classList.contains("playable")) return;
-      myCardsZone.querySelectorAll(".my-card-wrap").forEach((w) =>
-        w.classList.remove("playable"),
-      );
-      const randomSoundIndex = Math.floor(Math.random() * 15);
-      sndCard(randomSoundIndex);
-      animatePlay(cel, buildCard(card), () => playCard(card));
+      // Evita el "ghost click" justo despues de un swipe tactil.
+      if (Date.now() - lastTouchPlayAt < 450) return;
+      tryPlayCard();
     },
     { once: true },
   );
+
+  wrap.addEventListener("touchstart", (e) => {
+    if (played || ui.locked || !wrap.classList.contains("playable")) return;
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    hasTouchStart = true;
+    isDragging = false;
+  }, { passive: true });
+
+  wrap.addEventListener("touchmove", (e) => {
+    if (!hasTouchStart || played || ui.locked || !wrap.classList.contains("playable")) return;
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) isDragging = true;
+    if (!isDragging) return;
+    applyDragVisual(dx, dy);
+  }, { passive: true });
+
+  wrap.addEventListener("touchend", (e) => {
+    if (!hasTouchStart || played || ui.locked || !wrap.classList.contains("playable")) return;
+    hasTouchStart = false;
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // Desde la mano inferior, "tirar carta al centro" suele ser un swipe hacia arriba.
+    const isSwipeUp = dy <= -36 && absDy > absDx * 1.15;
+    if (!isSwipeUp) {
+      resetDragVisual(false);
+      return;
+    }
+
+    lastTouchPlayAt = Date.now();
+    tryPlayCard();
+  }, { passive: true });
+
+  wrap.addEventListener("touchcancel", () => {
+    hasTouchStart = false;
+    if (played) return;
+    resetDragVisual(false);
+  }, { passive: true });
 }
 
 // --- Mensajes de mesa ---------------------------------------------------------
