@@ -112,5 +112,3 @@ victoria,
 derrota.
 
 ---
-
-spritesheet para optimizar carga imágenes (un solo archivo)
