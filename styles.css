@@ -1425,6 +1425,7 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  background-repeat: no-repeat;
 }
 
 /* Imatge de carta (Media/Images/Cards) */
@@ -1434,10 +1435,6 @@ body {
   overflow: hidden;
 }
 .playing-card.use-img .card-art {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
   border-radius: inherit;
   user-select: none;
   pointer-events: none;
@@ -2890,13 +2887,10 @@ body {
   }
 }
 
-.sum-envit-card-img {
-  width: 28px;
-  height: 40px;
-  object-fit: cover;
+/* Mini cartes de prova d'envit (div .card-art, no <img>) */
+.sum-envit-proof .playing-card--log-mini .card-art {
   border-radius: 4px;
   border: 1px solid rgba(0, 0, 0, 0.25);
-  vertical-align: middle;
 }
 
 .sum-envit-pts {
@@ -3613,9 +3607,7 @@ body {
 
 /* Cartes dins les cel·les de baza (3D controlat per GSAP ara) */
 .trick-cell-rival .playing-card,
-.trick-cell-mine .playing-card,
-.trick-cell-rival img,
-.trick-cell-mine img {
+.trick-cell-mine .playing-card {
   width: 100% !important;
   height: 100% !important;
   margin: 0 !important;

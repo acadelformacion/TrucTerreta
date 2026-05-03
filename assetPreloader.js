@@ -1,23 +1,15 @@
-const CARD_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12];
-const SUIT_LETTERS = ["o", "c", "e", "b"];
+const SPRITE_PNG = "./Media/Images/Cards/cards-sprite.png";
+const SPRITE_JSON = "./Media/Images/Cards/cards-sprite.json";
+
 const BG_IMAGE_BY_TABLE = {
   bg3: "./Media/Images/Others/fondo-mesa-juego-bar.webp",
 };
 
 const warmCache = new Map();
 
-function buildCardUrls(deck = "classic") {
-  const basePath =
-    deck && deck !== "classic"
-      ? `./Media/Images/Cards/${deck}`
-      : "./Media/Images/Cards";
-  const urls = [];
-  for (const n of CARD_NUMBERS) {
-    for (const s of SUIT_LETTERS) {
-      urls.push(`${basePath}/${n}${s}.jpg`);
-    }
-  }
-  return urls;
+/** URLs del atlas (PNG + JSON) a precalentar antes de la partida. */
+function buildCardUrls() {
+  return [SPRITE_PNG, SPRITE_JSON];
 }
 
 function preloadImage(src) {
@@ -39,15 +31,26 @@ function preloadImage(src) {
   });
 }
 
+function preloadJson(src) {
+  return fetch(src)
+    .then(() => {})
+    .catch(() => {});
+}
+
+function preloadUrl(src) {
+  return src.endsWith(".json") ? preloadJson(src) : preloadImage(src);
+}
+
 function preloadAssetGroup(deck, tableBackground) {
-  const urls = buildCardUrls(deck);
+  const urls = buildCardUrls();
   const bgSrc =
     tableBackground === "green" || tableBackground === "bg2"
       ? null
       : (BG_IMAGE_BY_TABLE[tableBackground] ||
         `./Media/Images/Others/fondo-mesa-juego-${tableBackground}.webp`);
-  if (bgSrc) urls.push(bgSrc);
-  return Promise.all(urls.map(preloadImage));
+  const tasks = urls.map(preloadUrl);
+  if (bgSrc) tasks.push(preloadImage(bgSrc));
+  return Promise.all(tasks);
 }
 
 export async function warmupMatchAssets({
