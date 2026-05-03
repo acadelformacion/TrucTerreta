@@ -834,7 +834,43 @@ export function initStatsModal() {
     }
   };
 
-  openBtn.addEventListener("click", show);
+  openBtn.addEventListener("click", () => {
+    const user = auth.currentUser;
+    if (user && !user.isAnonymous) {
+      show();
+    } else {
+      openStatsPromoModal();
+    }
+  });
+  closeBtn.addEventListener("click", hide);
+  backdrop.addEventListener("click", hide);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) hide();
+  });
+}
+
+let _openStatsPromoModal = () => {};
+export function openStatsPromoModal() {
+  _openStatsPromoModal();
+}
+
+export function initStatsPromoModal() {
+  const modal = $("statsPromoModal");
+  const backdrop = $("statsPromoModalBackdrop");
+  const closeBtn = $("statsPromoModalClose");
+
+  if (!modal || !backdrop || !closeBtn) return;
+
+  const hide = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+
+  _openStatsPromoModal = () => {
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+  };
+
   closeBtn.addEventListener("click", hide);
   backdrop.addEventListener("click", hide);
   document.addEventListener("keydown", (e) => {

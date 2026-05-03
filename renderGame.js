@@ -1929,13 +1929,21 @@ function updateRivalTimer(state) {
 // --- HUD ---------------------------------------------------------------------
 function renderHUD(state) {
   const hideCode = session.roomVisibility === "public";
-  $("hudRoom").textContent = hideCode
-    ? ""
-    : `Sala ${session.roomCode || "-"}`;
+  const roomEl = $("hudRoom");
+  if (roomEl) {
+    if (hideCode) {
+      roomEl.textContent = "";
+      roomEl.classList.add("hidden");
+    } else {
+      roomEl.textContent = `Sala ${session.roomCode || "-"}`;
+      roomEl.classList.remove("hidden");
+    }
+  }
   const puntosObjetivo =
     Number(state?.settings?.puntosParaGanar) === 24 ? 24 : 12;
-  $("hudTarget").textContent = `🎯 ${puntosObjetivo} pedres`;
-  $("hudNick").textContent = `👤 ${pName(state, session.mySeat)}`;
+  $("hudTarget").textContent = `${puntosObjetivo} pedres`;
+  $("hudNick").textContent = pName(state, session.mySeat);
+  $("hudMode").textContent = getNumSeats(state) === 4 ? "2v2" : "1v1";
 
   const myTeam = teamOf(session.mySeat);
   const rivTeam = myTeam === 0 ? 1 : 0;

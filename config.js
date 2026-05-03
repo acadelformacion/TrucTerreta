@@ -5,7 +5,7 @@ const CONFIG_KEY = "trucConfig";
 const DEFAULT_CONFIG = {
   buttonSize: "normal", // 'normal' | 'large'
   cardDeck: "classic", // 'classic' | (añade más aquí)
-  tableBackground: "green", // 'green' | 'bg2' | (añade más aquí)
+  tableBackground: "verde", // 'verde' | 'azul' | 'bg3'
   sound: true, // true | false
   vibration: true, // true | false
 };
@@ -14,7 +14,11 @@ const DEFAULT_CONFIG = {
 export function loadConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
-    return { ...DEFAULT_CONFIG, ...saved };
+    const cfg = { ...DEFAULT_CONFIG, ...saved };
+    // Migración de valores antiguos a los nuevos basados en imágenes
+    if (cfg.tableBackground === "green") cfg.tableBackground = "verde";
+    if (cfg.tableBackground === "bg2") cfg.tableBackground = "azul";
+    return cfg;
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -40,9 +44,7 @@ export function applyConfig(cfg = loadConfig()) {
     table.classList.forEach((cls) => {
       if (cls.startsWith("bg-")) table.classList.remove(cls);
     });
-    if (cfg.tableBackground !== "green") {
-      table.classList.add(`bg-${cfg.tableBackground}`);
-    }
+    table.classList.add(`bg-${cfg.tableBackground}`);
   }
 
   // Sonido: no hace nada en el DOM, isSoundEnabled() lo consulta

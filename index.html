@@ -133,7 +133,7 @@ PANTALLA 1 · LOBBY
           <div class="user-profile-meta">
             <span id="user-profile-name" class="user-profile-name">—</span>
             <span class="user-profile-wins">Victòries: <strong id="user-wins-count">0</strong></span>
-            <button type="button" id="btn-estadisticas" style="margin-top: 4px; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer;">📊 Les meues estadístiques</button>
+            <button type="button" id="btn-estadisticas" style="margin-top: 4px; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer;">📊 Estadístiques</button>
           </div>
         </div>
         <button type="button" id="lobbyEixirBtn" class="lobby-eixir-btn hud-leave">Eixir</button>
@@ -191,17 +191,18 @@ PANTALLA 2 · MESA DE JUEGO
     <span id="absenceCountdown" class="absence-countdown" aria-live="polite">60</span>
   </div>
   <div id="hud">
-    <div class="hud-left">
-      <span id="hudRoom" class="hud-pill">—</span>
-      <span id="hudTarget" class="hud-pill">12 pedres</span>
-      <span id="hudNick" class="hud-pill">—</span>
+    <div class="hud-side hud-left">
+      <span id="hudRoom" class="hud-pill hud-pill-room hidden">—</span>
+      <span id="hudNick" class="hud-pill hud-pill-nick">—</span>
+      <span id="hudMode" class="hud-pill hud-pill-mode">1v1</span>
     </div>
-    <div class="hud-center">
+    <div class="hud-center" aria-live="polite">
       <span id="hudScore0" class="hud-score-num">0</span>
       <span class="hud-score-sep">·</span>
       <span id="hudScore1" class="hud-score-num">0</span>
     </div>
-    <div class="hud-right">
+    <div class="hud-side hud-right">
+      <span id="hudTarget" class="hud-pill hud-pill-target">12 pedres</span>
       <button id="leaveBtn" class="hud-leave">Eixir</button>
     </div>
   </div>
@@ -256,7 +257,6 @@ PANTALLA 2 · MESA DE JUEGO
     </div>
   
     <div id="myZone">
-      <div id="myCards" class="my-cards"></div>
       <div class="my-zone-header">
         <div class="player-avatar-wrap" id="myAvatarContainer">
           <div id="myAv" class="player-av-sm"></div>
@@ -267,6 +267,7 @@ PANTALLA 2 · MESA DE JUEGO
         </div>
         <div id="myName" class="player-name">—</div>
       </div>
+      <div id="myCards" class="my-cards"></div>
     </div>
   </div>
 
@@ -299,8 +300,8 @@ PANTALLA 2 · MESA DE JUEGO
   <div class="cfg-section" id="cfgTableBackgroundSection">
     <div class="cfg-label">Fons de la taula:</div>
     <div class="cfg-options">
-      <button class="cfg-opt" data-cfg="tableBackground" data-val="green">Verd</button>
-      <button class="cfg-opt" data-cfg="tableBackground" data-val="bg2">Blau</button>
+      <button class="cfg-opt" data-cfg="tableBackground" data-val="verde">Clàssic verd</button>
+      <button class="cfg-opt" data-cfg="tableBackground" data-val="azul">Clàssic blau</button>
       <button class="cfg-opt" data-cfg="tableBackground" data-val="bg3">Bar</button>
     </div>
   </div>
@@ -590,7 +591,7 @@ PANTALLA 2 · MESA DE JUEGO
   <div class="create-room-backdrop" id="statsModalBackdrop"></div>
   <div class="create-room-panel">
     <div class="create-room-head">
-      <h2 id="statsModalTitle" class="create-room-title">📊 Les meues estadístiques</h2>
+      <h2 id="statsModalTitle" class="create-room-title">📊 Estadístiques</h2>
     </div>
     <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; margin: 15px 0;">
       <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
@@ -621,6 +622,41 @@ PANTALLA 2 · MESA DE JUEGO
     <div class="create-room-actions">
       <button type="button" class="create-room-btn-secondary" id="statsModalClose" style="width: 100%;">
         Tancar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Promo Estadístiques (Convidats) -->
+<div
+  id="statsPromoModal"
+  class="create-room-modal hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="statsPromoModalTitle"
+  aria-hidden="true"
+>
+  <div class="create-room-backdrop" id="statsPromoModalBackdrop"></div>
+  <div class="create-room-panel" style="text-align: center;">
+    <div class="create-room-head">
+      <h2 id="statsPromoModalTitle" class="create-room-title">📊 Estadístiques</h2>
+    </div>
+    <div style="margin: 25px 0;">
+      <p style="font-size: 1.1rem; line-height: 1.5; color: #fff; margin-bottom: 10px;">
+        Els convidats no deixen rastre...
+      </p>
+      <p style="font-size: 1.2rem; line-height: 1.4; color: #ffd700; font-weight: bold;">
+        Registra't i deixa constància de les teues victòries! 💪
+      </p>
+    </div>
+    
+    <div class="auth-google-wrap" style="margin: 0 auto 25px;">
+       <div id="g_id_signin_promo"></div>
+    </div>
+
+    <div class="create-room-actions" style="display: flex; justify-content: center; margin-top: 10px; border-top: none; padding-top: 0;">
+      <button type="button" id="statsPromoModalClose" style="background: #cc2b2b; color: white; border: 1px solid rgba(255,255,255,0.1); padding: 6px 16px; border-radius: 10px; cursor: pointer; font-weight: bold; font-size: 0.8rem; transition: all 0.2s;">
+        Tornar a la sala de joc
       </button>
     </div>
   </div>

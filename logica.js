@@ -514,8 +514,12 @@ export function applyHandEnd(state, reason, foldedSeat) {
 
   // --- 1. RESOLVER ENVIT ---
   if (h.envit.state === "accepted") {
-    let ew = isFold ? winnerTeam : resolvedEnvitWinnerSeat(h.envit, state.mano);
-    let envitPerMa = !isFold && (h.envit.perMa === true);
+    // Si el plec és per abandó real (goMazo/timeout), el rival guanya l'envit.
+    // Si el plec és per "no_vull" al truc (h.truc.state === "rejected"), l'envit
+    // ja estava resolt per punts i no pot ser sobreescrit pel winnerTeam del truc.
+    const trucRejected = h.truc?.state === "rejected";
+    let ew = (isFold && !trucRejected) ? winnerTeam : resolvedEnvitWinnerSeat(h.envit, state.mano);
+    let envitPerMa = (!isFold || trucRejected) && (h.envit.perMa === true);
     if (ew === null) {
       // Últim recurs: millor envit de cada equip (mans residuals).
       // En 2v2: equip 0 = seats 0+2, equip 1 = seats 1+3.
@@ -526,7 +530,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
         if (i % 2 === 0) { if (v > v0) v0 = v; }
         else              { if (v > v1) v1 = v; }
       }
-      envitPerMa = !isFold && (v0 === v1);
+      envitPerMa = (!isFold || trucRejected) && (v0 === v1);
       ew = v0 > v1 ? 0 : v1 > v0 ? 1 : teamOf(state.mano);
     }
     const ep =
@@ -557,7 +561,7 @@ export function applyHandEnd(state, reason, foldedSeat) {
     };
     pushLog(
       state,
-      isFold
+      (isFold && !trucRejected)
         ? `Envit: guanya ${ewName} per abandó (+${ep}).`
         : `Envit: guanya ${ewName} (+${ep}).`,
       proofMeta,

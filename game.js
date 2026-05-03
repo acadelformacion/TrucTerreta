@@ -89,6 +89,12 @@ function updateLobbyProfileHeader(user) {
     const n = Number(localStorage.getItem(WINS_LS_PREFIX + user.uid) || 0);
     winsEl.textContent = String(Number.isFinite(n) ? n : 0);
   }
+
+  const statsBtn = document.getElementById("btn-estadisticas");
+  if (statsBtn) {
+    statsBtn.style.opacity = "1";
+    statsBtn.style.cursor = "pointer";
+  }
 }
 
 async function applySignedInUi(user) {
@@ -104,6 +110,14 @@ async function applySignedInUi(user) {
 
   pantallaInicio.classList.add("hidden");
   pantallaLobby.classList.remove("hidden");
+
+  if (user && !user.isAnonymous) {
+    const promoModal = document.getElementById("statsPromoModal");
+    if (promoModal) {
+      promoModal.classList.add("hidden");
+      promoModal.setAttribute("aria-hidden", "true");
+    }
+  }
 
   if (user?.uid) console.log("Auth UID:", user.uid);
 

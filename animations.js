@@ -919,3 +919,4 @@ export function stopConfetti() {
     }
   }
 }
+

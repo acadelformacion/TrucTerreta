@@ -90,6 +90,19 @@ function initGoogleSignInButton() {
         logo_alignment: "left",
       });
     }
+    const promoSlot = document.getElementById("g_id_signin_promo");
+    if (promoSlot) {
+      promoSlot.innerHTML = "";
+      gsi.renderButton(promoSlot, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+        width: 300,
+        logo_alignment: "left",
+      });
+    }
     _gsiBootDone = true;
     return true;
   } catch (e) {

@@ -3,6 +3,8 @@ const SPRITE_JSON = "./Media/Images/Cards/cards-sprite.json";
 
 const BG_IMAGE_BY_TABLE = {
   bg3: "./Media/Images/Others/fondo-mesa-juego-bar.webp",
+  verde: "./Media/Images/Others/fondo-verde.webp",
+  azul: "./Media/Images/Others/fondo-azul.webp",
 };
 
 const warmCache = new Map();
@@ -44,10 +46,8 @@ function preloadUrl(src) {
 function preloadAssetGroup(deck, tableBackground) {
   const urls = buildCardUrls();
   const bgSrc =
-    tableBackground === "green" || tableBackground === "bg2"
-      ? null
-      : (BG_IMAGE_BY_TABLE[tableBackground] ||
-        `./Media/Images/Others/fondo-mesa-juego-${tableBackground}.webp`);
+    BG_IMAGE_BY_TABLE[tableBackground] ||
+    `./Media/Images/Others/fondo-mesa-juego-${tableBackground}.webp`;
   const tasks = urls.map(preloadUrl);
   if (bgSrc) tasks.push(preloadImage(bgSrc));
   return Promise.all(tasks);
@@ -55,7 +55,7 @@ function preloadAssetGroup(deck, tableBackground) {
 
 export async function warmupMatchAssets({
   deck = "classic",
-  tableBackground = "green",
+  tableBackground = "verde",
   timeoutMs = 1800,
 } = {}) {
   const key = `${deck}|${tableBackground}`;

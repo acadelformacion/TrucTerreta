@@ -99,7 +99,8 @@ body {
   gap: 20px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(30, 88, 58, 0.85);
+  background-color: rgba(24, 74, 50, 1);
+  background-image: linear-gradient(135deg, rgba(45, 125, 85, 0.98) 0%, rgba(12, 45, 30, 0.98) 100%);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
 }
 
@@ -319,6 +320,18 @@ body {
   display: flex;
   justify-content: center;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.config-panel,
+.create-room-panel {
+  backdrop-filter: blur(16px) saturate(120%);
+  background: linear-gradient(
+    165deg,
+    rgba(20, 45, 35, 0.92),
+    rgba(10, 20, 15, 0.96)
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6) !important;
 }
 
 .legal-modal-close-btn {
@@ -618,7 +631,8 @@ body {
 }
 
 /* El botó de Google (iframe) amb forma pill alineada amb el radi del convidat */
-.auth-google-wrap #g_id_signin {
+.auth-google-wrap #g_id_signin,
+.auth-google-wrap #g_id_signin_promo {
   display: flex;
   justify-content: center;
   transform: scale(1.05);
@@ -759,7 +773,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: lab(33.24% -32.48 19.97 / 0.93); /* verde tapete */
+  background-color: rgba(22, 70, 42, 1); /* verde tapete base */
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 20px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
@@ -1094,80 +1108,113 @@ body {
   color: #7ee787;
 }
 
-/* HUD */
+/* HUD — marcador sempre al centre del viewport; laterals es compacten */
 #hud {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 50;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: space-between;
   box-sizing: border-box;
-  padding: 6px 16px;
+  padding: 6px 10px;
   height: 56px;
   background: rgba(18, 52, 42, 0.92);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
+  gap: 6px;
 }
-.hud-left,
-.hud-right {
+.hud-side {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: calc(50% - min(26vw, 104px));
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: clamp(3px, 1.2vw, 10px);
+  overflow: hidden;
+}
+[data-mode="2v2"] .hud-side {
+  max-width: calc(50% - min(32vw, 128px));
 }
 .hud-left {
-  align-self: center;
-  justify-self: start;
+  justify-content: flex-start;
 }
 .hud-right {
-  align-self: center;
-  justify-self: end;
+  justify-content: flex-end;
 }
 .hud-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
   display: flex;
-  align-items: center;
-  align-self: center;
-  justify-self: center;
-  gap: 12px;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(6px, 2vw, 14px);
+  pointer-events: none;
 }
 .hud-pill {
-  font-size: 11px;
+  font-size: clamp(8px, 2.6vw, 11px);
   font-weight: 700;
-  letter-spacing: 0.4px;
-  padding: 4px 10px;
+  letter-spacing: 0.25px;
+  padding: clamp(2px, 0.7vw, 4px) clamp(5px, 1.8vw, 10px);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
   color: var(--muted);
   white-space: nowrap;
-  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.hud-side .hud-pill {
+  max-width: min(38vw, 200px);
+}
+.hud-pill-room {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(28vw, 120px);
+}
+.hud-pill-nick {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.hud-pill-mode {
+  flex: 0 0 auto;
+  max-width: none;
+}
+.hud-pill-target {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(30vw, 130px);
+}
 .hud-score-num {
   font-family: "Crimson Pro", serif;
-  font-size: 46px;
-  font-weight: 600;
+  font-size: clamp(42px, min(12vw, 11vh), 60px);
+  font-weight: 700;
   color: var(--gold);
-  line-height: 0.9;
-  min-width: 38px;
+  line-height: 0.88;
+  min-width: clamp(28px, 9vw, 42px);
   text-align: center;
+  text-shadow: 0 0 20px var(--gold-glow), 0 2px 4px rgba(0, 0, 0, 0.35);
 }
 .hud-score-sep {
-  font-size: 28px;
+  font-size: clamp(20px, 5.5vw, 36px);
   color: var(--dim);
   line-height: 1;
+  opacity: 0.95;
 }
 .hud-leave {
   font-family: "Outfit", sans-serif;
-  font-size: 12px;
+  font-size: clamp(10px, 2.6vw, 12px);
   font-weight: 700;
   background: #9f2424;
   border: 1px solid #d85a5a;
   border-radius: 8px;
-  padding: 7px 14px;
+  padding: clamp(3px, 1vw, 7px) clamp(7px, 2.2vw, 14px);
   color: #fff6f6;
   cursor: pointer;
   transition:
@@ -1175,7 +1222,7 @@ body {
     border-color 0.15s,
     color 0.15s;
   white-space: nowrap;
-  min-height: 44px;
+  flex: 0 0 auto;
 }
 .hud-leave:hover {
   background: #b63131;
@@ -1183,10 +1230,9 @@ body {
   color: #ffffff;
 }
 
-/* Eixir a la mesa: una mica més baix que el touch target genèric del HUD */
+/* Eixir a la mesa: es redueix amb la resta del HUD dret */
 #leaveBtn {
-  min-height: 34px;
-  padding: 4px 12px;
+  min-height: clamp(28px, 8vw, 34px);
   line-height: 1.2;
 }
 
@@ -1202,11 +1248,7 @@ body {
   flex-direction: column !important;
   align-items: center !important;
   justify-content: space-between !important;
-  background: radial-gradient(
-    ellipse at 50% 40%,
-    #2d6e3a 0%,
-    #1e4d28 100%
-  ) !important;
+  background: #0b1512 !important; /* Fallback color */
   overflow: hidden !important;
   touch-action: manipulation;
 }
@@ -1329,7 +1371,7 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  z-index: 1;
+  z-index: 6;
   width: 100%;
 }
 
@@ -1340,14 +1382,14 @@ body {
   position: relative;
   z-index: 2;
   width: 100%;
-  height: 114px;
+  height: 128px;
   transition: height 0.3s ease;
 }
 
 /* Alçada de la mà en escriptori */
 @media (min-width: 1024px) {
   .my-cards {
-    height: 165px;
+    height: 182px;
   }
 }
 .my-card-wrap {
@@ -1391,8 +1433,8 @@ body {
 
 /* Cartes (playing-card) */
 .playing-card {
-  width: 86px;
-  height: 123px;
+  width: 94px;
+  height: 134px;
   border-radius: var(--r-card);
   background: linear-gradient(
     160deg,
@@ -1479,8 +1521,8 @@ body {
 
 /* Mateixa mida que .playing-card: repartiment inicial boca baix */
 .card-back.card-back-hand {
-  width: 86px;
-  height: 123px;
+  width: 94px;
+  height: 134px;
   flex-shrink: 0;
 }
 @media (min-width: 768px) {
@@ -1519,6 +1561,8 @@ body {
   z-index: 50 !important;
   touch-action: manipulation;
 }
+
+
 .offer-msg {
   text-align: center;
   font-size: 14px;
@@ -2127,12 +2171,12 @@ body {
       max(12px, env(safe-area-inset-left, 0px)) !important;
   }
   .playing-card {
-    width: 94px;
-    height: 134px;
+    width: 103px;
+    height: 147px;
     padding: 7px;
   }
   .my-cards {
-    height: 132px;
+    height: 148px;
   }
 }
 
@@ -2195,7 +2239,7 @@ body {
 
 /* Targeta de l'overlay sala en espera */
 #waitingOverlay .overlay-card {
-  background: rgba(20, 90, 45, 0.94) !important;
+  background-color: rgba(18, 65, 38, 1) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
 }
 
@@ -2262,7 +2306,8 @@ body {
       rgba(0, 0, 0, 0.03) 1px,
       transparent 1px,
       transparent 4px
-    ) !important;
+    ),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, transparent 60%, rgba(0, 0, 0, 0.22) 100%) !important;
 }
 
 /* Overlay sala: codi i portada */
@@ -2318,9 +2363,9 @@ body {
   max-height: calc(100dvh - 20px);
   max-height: calc(100svh - 20px);
   min-height: 0;
-  padding: clamp(6px, 1.4vmin, 16px) clamp(10px, 2.2vmin, 18px);
+  padding: clamp(16px, 4vmin, 32px) clamp(12px, 3vmin, 24px);
   align-items: stretch;
-  gap: clamp(2px, 1vmin, 8px);
+  gap: clamp(12px, 3vmin, 24px);
   overflow: hidden;
   flex: 0 1 auto;
   justify-content: flex-start;
@@ -2328,7 +2373,7 @@ body {
 
 .waiting-head-block {
   text-align: center;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
 }
 #waitingOverlay .waiting-head-block {
   display: grid;
@@ -2355,8 +2400,8 @@ body {
 }
 #waitingOverlay .waiting-mode-pts-line {
   justify-content: center;
-  margin-top: clamp(3px, 0.8vmin, 8px);
-  margin-bottom: clamp(2px, 0.7vmin, 6px);
+  margin-top: clamp(8px, 2vmin, 16px);
+  margin-bottom: clamp(6px, 1.5vmin, 12px);
   font-size: clamp(12px, 2.5vmin, 14px);
 }
 #waitingOverlay .waiting-mode-pts-line .rl-tag {
@@ -2382,12 +2427,15 @@ body {
   position: relative;
   background: linear-gradient(
     165deg,
-    rgba(42, 26, 12, 0.94) 0%,
-    rgba(18, 11, 6, 0.97) 100%
+    rgba(18, 48, 32, 0.96) 0%,
+    rgba(8, 22, 14, 0.98) 100%
   );
-  border: 1px solid rgba(212, 175, 55, 0.38);
-  border-radius: 18px;
-  padding: 14px 12px 16px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 20px;
+  min-width: clamp(140px, 28vmin, 200px);
+  height: clamp(250px, 52vmin, 310px);
+  padding: 18px 16px;
+  justify-content: flex-start; /* Alineación consistente */
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
@@ -2398,9 +2446,14 @@ body {
   text-align: center;
 }
 #waitingOverlay .player-wait-slot {
-  padding: clamp(6px, 1.4vmin, 12px) clamp(6px, 1.2vmin, 10px);
-  gap: clamp(3px, 0.9vmin, 6px);
-  border-radius: clamp(12px, 2.5vmin, 16px);
+  padding: clamp(12px, 2vmin, 20px) clamp(10px, 2vmin, 18px);
+  gap: clamp(8px, 1.5vmin, 12px);
+  border-radius: clamp(16px, 3vmin, 24px);
+}
+
+/* En 1v1 hacemos los recuadros más anchos para que luzcan más */
+body:not([data-mode="2v2"]) .player-wait-slot {
+  min-width: clamp(220px, 45vmin, 320px);
 }
 #slot-player-1 {
   position: relative;
@@ -2512,10 +2565,11 @@ body {
   color: #2d1e00;
   font-weight: 900;
   font-size: clamp(9px, 1.9vmin, 11px);
-  padding: clamp(2px, 0.5vmin, 4px) clamp(8px, 1.8vmin, 10px);
+  padding: clamp(3px, 0.7vmin, 6px) clamp(10px, 2vmin, 14px);
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.4);
+  margin-top: auto; /* Empuja el botón al final para ayudar a la consistencia visual */
 }
 .slot-change-avatar-btn:hover {
   filter: brightness(1.05);
@@ -3085,10 +3139,11 @@ body {
   flex-direction: column;
   align-items: center;
   align-self: flex-start;
-  margin-left: max(6px, env(safe-area-inset-left, 0px));
+  margin-left: max(22px, env(safe-area-inset-left, 0px));
   margin-top: 2px;
   gap: 0;
-  z-index: 1;
+  z-index: 6;
+  pointer-events: auto;
 }
 
 .my-zone-header #myName {
@@ -3264,6 +3319,17 @@ body {
   object-fit: cover !important;
   border-radius: 50% !important;
   display: block !important;
+}
+
+@media (min-width: 768px) {
+  .player-av-sm {
+    width: 62px !important;
+    height: 62px !important;
+  }
+  .av-ring {
+    width: 72px !important;
+    height: 72px !important;
+  }
 }
 
 /* Anell de temps (SVG) */
@@ -3641,13 +3707,13 @@ body {
 /* Botons d'acció (base): volum 3D + semàfor / escales progressives */
 .abtn {
   font-family: "Outfit", sans-serif;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 800;
   border: 2px solid rgba(255, 255, 255, 0.22);
   border-radius: 8px;
-  padding: 13px 22px;
+  padding: 14px 24px;
   cursor: pointer;
-  min-width: 110px;
+  min-width: 120px;
   transition:
     opacity 0.15s,
     transform 0.08s ease-out,
@@ -3659,7 +3725,7 @@ body {
     0 4px 0 rgba(0, 0, 0, 0.22),
     0 6px 14px rgba(0, 0, 0, 0.35);
   color: #fff;
-  min-height: 44px;
+  min-height: 50px;
 }
 
 .abtn:active {
@@ -3738,14 +3804,14 @@ body {
     flex-wrap: nowrap !important;
     gap: 4px !important;
     width: 100% !important;
-    height: 40px !important;
+    height: 46px !important;
     padding: 0 4px !important;
   }
 
   .abtn {
     flex: 1 1 0;
-    height: 40px;
-    font-size: 15px;
+    height: 46px;
+    font-size: 16px;
     font-weight: 800;
     margin: 0;
     padding: 0;
@@ -4005,13 +4071,45 @@ body {
   color: var(--gold);
 }
 
-/* Fons de taula: blau */
-#table.bg-bg2 {
-  background: radial-gradient(
-    ellipse at 50% 40%,
-    #2d519a 0%,
-    #1f3054 100%
-  ) !important;
+/* Fons de taula: Clàssics (imatge) */
+#table.bg-verde,
+#table.bg-azul {
+  background: transparent !important;
+}
+
+#table.bg-verde::after,
+#table.bg-azul::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(2px) brightness(0.9);
+  transform: scale(1.05);
+  z-index: -1;
+  pointer-events: none;
+}
+
+#table.bg-verde::after {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.45)),
+    url("./Media/Images/Others/fondo-verde.webp");
+}
+
+#table.bg-azul::after {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.3)),
+    url("./Media/Images/Others/fondo-azul.webp");
+}
+
+#table.bg-verde > *:not(#deckPile),
+#table.bg-azul > *:not(#deckPile) {
+  position: relative;
+  z-index: 1;
 }
 
 /* Fons de taula: bar (imatge + blur) */
@@ -4026,7 +4124,6 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-
   background-image:
     linear-gradient(rgba(53, 53, 53, 0.5), rgba(32, 32, 32, 0.5)),
     url("./Media/Images/Others/fondo-mesa-juego-bar.webp");

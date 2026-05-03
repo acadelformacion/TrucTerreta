@@ -49,6 +49,7 @@ import {
   configureLobby,
   changeSeat,
   initStatsModal,
+  initStatsPromoModal,
 } from "./lobby.js";
 import { sndBtn } from "./audio.js";
 import {
@@ -293,7 +294,7 @@ export function startSession(code) {
   const cfg = loadConfig();
   warmupMatchAssets({
     deck: cfg.cardDeck || "classic",
-    tableBackground: cfg.tableBackground || "green",
+    tableBackground: cfg.tableBackground || "verde",
     timeoutMs: 1,
   }).catch(() => {});
 
@@ -564,6 +565,7 @@ export function initApp() {
   initPrivateCodeModal();
   initLeaveConfirmModal();
   initStatsModal();
+  initStatsPromoModal();
   limpiarSalasAntiguas(); // sin await, que corra en segundo plano
   $("btn-crear-publica")?.addEventListener("click", () =>
     openCreateRoomModal("public"),
@@ -673,7 +675,7 @@ export function initApp() {
     const cfg = loadConfig();
     await warmupMatchAssets({
       deck: cfg.cardDeck || "classic",
-      tableBackground: cfg.tableBackground || "green",
+      tableBackground: cfg.tableBackground || "verde",
       timeoutMs: 1800,
     });
     let roomData = null;
