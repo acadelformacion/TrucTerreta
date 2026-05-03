@@ -1,3 +1,5 @@
+import { AVATAR_IMAGES, GUEST_LOBBY_AVATAR, BOT_AVATAR } from "./avatars.js";
+
 const SPRITE_PNG = "./Media/Images/Cards/cards-sprite.png";
 const SPRITE_JSON = "./Media/Images/Cards/cards-sprite.json";
 
@@ -71,4 +73,25 @@ export async function warmupMatchAssets({
   const loaded = await Promise.race([loadPromise.then(() => true), timeoutPromise]);
   if (timeoutId != null) clearTimeout(timeoutId);
   return loaded;
+}
+
+/**
+ * Precarga en segundo plano todos los avatares disponibles (lista + especiales).
+ * Llamar al mostrar el lobby, antes de que el usuario pueda elegir avatar.
+ */
+export function preloadAllAvatars() {
+  const urls = [
+    ...AVATAR_IMAGES.map((p) => (p.startsWith("./") ? p : `./${p}`)),
+    GUEST_LOBBY_AVATAR.startsWith("./") ? GUEST_LOBBY_AVATAR : `./${GUEST_LOBBY_AVATAR}`,
+    BOT_AVATAR.startsWith("./") ? BOT_AVATAR : `./${BOT_AVATAR}`,
+  ];
+  urls.forEach(preloadImage);
+}
+
+/**
+ * Precarga en segundo plano todos los fondos de mesa del mapa BG_IMAGE_BY_TABLE.
+ * Llamar al entrar a la sala de espera (pre-lobby), antes de que la partida empiece.
+ */
+export function preloadAllTableBackgrounds() {
+  Object.values(BG_IMAGE_BY_TABLE).forEach(preloadImage);
 }

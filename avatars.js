@@ -13,14 +13,17 @@ export function configureAvatars(deps) {
 
 // --- Constants ----------------------------------------------------------------
 export const AVATAR_IMAGES = [
-  "Media/Images/Avatars/Avatar4.png",
-  "Media/Images/Avatars/Avatar3.png",
-  "Media/Images/Avatars/Avatar1.png",
-  "Media/Images/Avatars/Avatar14.png",
-  "Media/Images/Avatars/Avatar16.png",
-  "Media/Images/Avatars/Avatar6.png",
-  "Media/Images/Avatars/Avatar7.png",
-  "Media/Images/Avatars/Avatar5.png",
+  "Media/Images/Avatars/Avatar1.webp",
+  "Media/Images/Avatars/Avatar2.webp",
+  "Media/Images/Avatars/Avatar3.webp",
+  "Media/Images/Avatars/Avatar4.webp",
+  "Media/Images/Avatars/Avatar5.webp",
+  "Media/Images/Avatars/Avatar6.webp",
+  "Media/Images/Avatars/Avatar7.webp",
+  "Media/Images/Avatars/Avatar8.webp",
+  "Media/Images/Avatars/Avatar9.webp",
+  "Media/Images/Avatars/Avatar14.webp",
+  "Media/Images/Avatars/Avatar16.webp",
 ];
 export const GUEST_LOBBY_AVATAR =
   "Media/Images/Others/avatar-convidat.webp";
@@ -122,7 +125,7 @@ export function loadAvatarChoiceIntoMemory() {
       myAvatarChoice = "guest";
       return;
     }
-    if (raw && /^[0-7]$/.test(raw)) {
+    if (raw && /^([0-9]|10)$/.test(raw)) {
       myAvatarChoice = Number(raw);
       return;
     }
@@ -134,7 +137,7 @@ export function loadAvatarChoiceIntoMemory() {
     myAvatarChoice = "g";
     return;
   }
-  if (sel && /^[0-7]$/.test(sel)) {
+  if (sel && /^([0-9]|10)$/.test(sel)) {
     myAvatarChoice = Number(sel);
     return;
   }

@@ -132,7 +132,6 @@ PANTALLA 1 · LOBBY
           />
           <div class="user-profile-meta">
             <span id="user-profile-name" class="user-profile-name">—</span>
-            <span class="user-profile-wins">Victòries: <strong id="user-wins-count">0</strong></span>
             <button type="button" id="btn-estadisticas" style="margin-top: 4px; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer;">📊 Estadístiques</button>
           </div>
         </div>
@@ -473,11 +472,14 @@ PANTALLA 2 · MESA DE JUEGO
 
       <div id="waitingStatus" class="waiting-status">Esperant el segon jugador...</div>
 
+      <div id="guestWaitMsg" class="waiting-note hidden"></div>
+      <div id="waitingNote" class="waiting-note"></div>
+
       <div class="waiting-actions">
-        <button type="button" id="hostReadyBtn" class="lbtn lbtn-secondary waiting-action-btn hidden">
+        <button type="button" id="hostReadyBtn" class="lbtn waiting-action-btn waiting-ready-btn hidden">
           ✋ Estic preparat!
         </button>
-        <button type="button" id="guestReadyBtn" class="lbtn lbtn-secondary waiting-action-btn hidden">
+        <button type="button" id="guestReadyBtn" class="lbtn waiting-action-btn waiting-ready-btn hidden">
           ✋ Estic preparat!
         </button>
         <button type="button" id="startBtn" class="lbtn lbtn-primary waiting-action-btn waiting-start-btn hidden">
@@ -506,9 +508,6 @@ PANTALLA 2 · MESA DE JUEGO
           <button id="lobbyChat_Send" class="lobby-chat-send" type="button" aria-label="Enviar missatge">➤</button>
         </div>
       </div>
-
-      <div id="guestWaitMsg" class="waiting-note hidden"></div>
-      <div id="waitingNote" class="waiting-note"></div>
     </div>
   </div>
   </div>
@@ -561,14 +560,17 @@ PANTALLA 2 · MESA DE JUEGO
         <div class="av-opt av-opt-guest hidden" data-av="guest" title="Avatar de convidat">
           <img src="Media/Images/Others/avatar-convidat.webp" alt="Convidat" width="48" height="48" decoding="async" />
         </div>
-        <div class="av-opt" data-av="0"><img src="Media/Images/Avatars/Avatar4.png" alt="Avatar 4"></div>
-        <div class="av-opt" data-av="1"><img src="Media/Images/Avatars/Avatar3.png" alt="Avatar 3"></div>
-        <div class="av-opt" data-av="2"><img src="Media/Images/Avatars/Avatar1.png" alt="Avatar 1"></div>
-        <div class="av-opt" data-av="3"><img src="Media/Images/Avatars/Avatar14.png" alt="Avatar 14"></div>
-        <div class="av-opt" data-av="4"><img src="Media/Images/Avatars/Avatar16.png" alt="Avatar 16"></div>
-        <div class="av-opt" data-av="5"><img src="Media/Images/Avatars/Avatar6.png" alt="Avatar 6"></div>
-        <div class="av-opt" data-av="6"><img src="Media/Images/Avatars/Avatar7.png" alt="Avatar 7"></div>
-        <div class="av-opt" data-av="7"><img src="Media/Images/Avatars/Avatar5.png" alt="Avatar 5"></div>
+        <div class="av-opt" data-av="0"><img src="Media/Images/Avatars/Avatar1.webp" alt="Avatar 1" decoding="async"></div>
+        <div class="av-opt" data-av="1"><img src="Media/Images/Avatars/Avatar2.webp" alt="Avatar 2" decoding="async"></div>
+        <div class="av-opt" data-av="2"><img src="Media/Images/Avatars/Avatar3.webp" alt="Avatar 3" decoding="async"></div>
+        <div class="av-opt" data-av="3"><img src="Media/Images/Avatars/Avatar4.webp" alt="Avatar 4" decoding="async"></div>
+        <div class="av-opt" data-av="4"><img src="Media/Images/Avatars/Avatar5.webp" alt="Avatar 5" decoding="async"></div>
+        <div class="av-opt" data-av="5"><img src="Media/Images/Avatars/Avatar6.webp" alt="Avatar 6" decoding="async"></div>
+        <div class="av-opt" data-av="6"><img src="Media/Images/Avatars/Avatar7.webp" alt="Avatar 7" decoding="async"></div>
+        <div class="av-opt" data-av="7"><img src="Media/Images/Avatars/Avatar8.webp" alt="Avatar 8" decoding="async"></div>
+        <div class="av-opt" data-av="8"><img src="Media/Images/Avatars/Avatar9.webp" alt="Avatar 9" decoding="async"></div>
+        <div class="av-opt" data-av="9"><img src="Media/Images/Avatars/Avatar14.webp" alt="Avatar 14" decoding="async"></div>
+        <div class="av-opt" data-av="10"><img src="Media/Images/Avatars/Avatar16.webp" alt="Avatar 16" decoding="async"></div>
       </div>
     </div>
     <div class="create-room-actions">
@@ -607,15 +609,19 @@ PANTALLA 2 · MESA DE JUEGO
         <div id="statsLost" style="font-size: 1.5rem; font-weight: bold; color: #f87171;">0</div>
       </div>
       <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-        <div style="font-size: 0.8rem; opacity: 0.8;">Punts Totals</div>
+        <div style="font-size: 0.8rem; opacity: 0.8;">% Victòria</div>
+        <div id="statsWinRate" style="font-size: 1.5rem; font-weight: bold; color: #60a5fa;">0%</div>
+      </div>
+      <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+        <div style="font-size: 0.8rem; opacity: 0.8;">Pedres Acumulades</div>
         <div id="statsPoints" style="font-size: 1.5rem; font-weight: bold;">0</div>
       </div>
       <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-        <div style="font-size: 0.8rem; opacity: 0.8;">Racha Actual</div>
+        <div style="font-size: 0.8rem; opacity: 0.8;">Ratxa Actual</div>
         <div id="statsStreak" style="font-size: 1.5rem; font-weight: bold; color: #fbbf24;">0</div>
       </div>
-      <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-        <div style="font-size: 0.8rem; opacity: 0.8;">Millor Racha</div>
+      <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; opacity: 0.8;">Millor Ratxa</div>
         <div id="statsBestStreak" style="font-size: 1.5rem; font-weight: bold; color: #fbbf24;">0</div>
       </div>
     </div>

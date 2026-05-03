@@ -14,6 +14,7 @@ import {
   syncAvatarPickAfterAuth,
 } from "./ui.js";
 import { loadSpritesheet } from "./spritesheet.js";
+import { preloadAllAvatars } from "./assetPreloader.js";
 
 const WINS_LS_PREFIX = "truc_wins_";
 /** Sufix numèric estable per sessió (001–999) per a usuaris anònims de Firebase. */
@@ -85,16 +86,49 @@ function updateLobbyProfileHeader(user) {
     }
   }
 
-  if (winsEl && user.uid) {
-    const n = Number(localStorage.getItem(WINS_LS_PREFIX + user.uid) || 0);
-    winsEl.textContent = String(Number.isFinite(n) ? n : 0);
-  }
+  // El badge de victòries es deixa en blanc aquí:
+  // l'actualitzarà el listener de Firestore en temps real.
 
   const statsBtn = document.getElementById("btn-estadisticas");
   if (statsBtn) {
     statsBtn.style.opacity = "1";
     statsBtn.style.cursor = "pointer";
   }
+}
+
+/**
+ * Subscriu un listener en temps real a Firestore per al document del jugador.
+ * Actualitza el badge de victòries del capçal del lobby automàticament.
+ * Retorna la funció unsubscribe.
+ */
+function subscribePlayerStats(uid) {
+  // Cancel·lar listener anterior si n'hi havia
+  if (_unsubPlayerStats) {
+    _unsubPlayerStats();
+    _unsubPlayerStats = null;
+  }
+
+  const playerDocRef = doc(firestore, "players", uid);
+  _unsubPlayerStats = onSnapshot(
+    playerDocRef,
+    (snap) => {
+      const winsEl = document.getElementById("user-wins-count");
+      if (!winsEl) return;
+      const wins = snap.exists() ? (snap.data().gamesWon || 0) : 0;
+      winsEl.textContent = String(wins);
+      // Sincronitzar localStorage per a sessions futures sense connexió
+      localStorage.setItem(WINS_LS_PREFIX + uid, String(wins));
+    },
+    (err) => {
+      // En cas d'error (p.ex. desconnexió), mostra el valor en caché del localStorage
+      console.warn("subscribePlayerStats error:", err);
+      const winsEl = document.getElementById("user-wins-count");
+      if (winsEl) {
+        const cached = Number(localStorage.getItem(WINS_LS_PREFIX + uid) || 0);
+        winsEl.textContent = String(Number.isFinite(cached) ? cached : 0);
+      }
+    }
+  );
 }
 
 async function applySignedInUi(user) {
@@ -110,6 +144,9 @@ async function applySignedInUi(user) {
 
   pantallaInicio.classList.add("hidden");
   pantallaLobby.classList.remove("hidden");
+
+  // Precargar avatares en segundo plano para que aparezcan al instante al elegir
+  preloadAllAvatars();
 
   if (user && !user.isAnonymous) {
     const promoModal = document.getElementById("statsPromoModal");

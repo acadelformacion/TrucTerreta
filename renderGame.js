@@ -2530,13 +2530,15 @@ export function renderAll(room) {
       // move it below the faceoff section to avoid overlapping the slot card.
       const waBtn = $("waitingInviteWhatsappBtn");
       if (waBtn) {
-        waBtn.classList.toggle("hidden", isBotActive());
-        if (is2v2 && !isBotActive()) {
-          // Reattach below the faceoff div so it doesn't cover slot-player-1
+        const nJoinedForWa = Object.keys(state.players || {}).length;
+        const roomFull = nJoinedForWa >= numSeats;
+        waBtn.classList.toggle("hidden", isBotActive() || roomFull);
+        if (!isBotActive() && !roomFull && is2v2) {
+          // Reattach just below faceoff (abans de l'estat) per no tapar slot-player-1
           const faceoff = $("waitingFaceoff");
-          const actions = document.querySelector(".waiting-actions");
-          if (faceoff && actions && waBtn.parentElement !== faceoff.parentElement) {
-            faceoff.parentElement?.insertBefore(waBtn, actions);
+          const statusEl = $("waitingStatus");
+          if (faceoff && statusEl && waBtn.parentElement !== faceoff.parentElement) {
+            faceoff.parentElement?.insertBefore(waBtn, statusEl);
           }
         }
       }
@@ -2561,23 +2563,37 @@ export function renderAll(room) {
       if (tlA) tlA.classList.toggle("hidden", !is2v2);
       if (tlB) tlB.classList.toggle("hidden", !is2v2);
 
+      const waitSt = $("waitingStatus");
       if (!bothJoined) {
         const nJoined = Object.keys(state.players || {}).length;
         const missing = numSeats - nJoined;
-        $("waitingStatus").innerHTML = is2v2
+        waitSt.classList.remove("hidden");
+        waitSt.innerHTML = is2v2
           ? `Esperant ${missing} jugador${missing > 1 ? "s" : ""}<span class="dots"></span>`
           : 'Esperant el segon jugador<span class="dots"></span>';
       } else if (isBotMatch) {
-        $("waitingStatus").textContent = "Rival preparat! Pots iniciar la partida.";
+        waitSt.classList.remove("hidden");
+        waitSt.textContent = "Rival preparat! Pots iniciar la partida.";
       } else if (!allFirebaseReady) {
-        $("waitingStatus").innerHTML = is2v2
-          ? 'Cal que tots confirmeu \u00abpreparat\u00bb<span class="dots"></span>'
-          : 'Cal que els dos confirmeu \u00abpreparat\u00bb<span class="dots"></span>';
+        /* Si el convidat ja ha confirmat, guestWaitMsg ja ho diu → amaguem waitingStatus */
+        if (session.mySeat !== 0 && myReady) {
+          waitSt.textContent = "";
+          waitSt.classList.add("hidden");
+        } else {
+          waitSt.classList.remove("hidden");
+          waitSt.innerHTML = is2v2
+            ? 'Cal que tots confirmeu \u00abpreparat\u00bb<span class="dots"></span>'
+            : 'Cal que els dos confirmeu \u00abpreparat\u00bb<span class="dots"></span>';
+        }
       } else {
-        $("waitingStatus").textContent =
-          session.mySeat === 0
-            ? "Tots preparats! Pots iniciar la partida."
-            : "Tots preparats! Esperant l'amfitri\u00f3\u2026";
+        if (session.mySeat === 0) {
+          waitSt.classList.remove("hidden");
+          waitSt.textContent = "Tots preparats! Pots iniciar la partida.";
+        } else {
+          /* Convidat: el missatge queda a guestWaitMsg; evita duplicar aquí dalt */
+          waitSt.textContent = "";
+          waitSt.classList.add("hidden");
+        }
       }
 
       if (session.mySeat === 0) {
@@ -2605,8 +2621,14 @@ export function renderAll(room) {
         const gW = $("guestWaitMsg");
         gW.classList.toggle("hidden", !bothJoined || !myReady);
         if (myReady) {
-          gW.innerHTML =
-            'Esperant que l\'amfitri\u00f3 inicie la partida<span class="dots"></span>';
+          if (allFirebaseReady) {
+            gW.innerHTML =
+              'Esperant que l\'amfitri\u00f3 inicie la partida<span class="dots"></span>';
+          } else {
+            gW.innerHTML = is2v2
+              ? 'Esperant que la resta confirme \u00abpreparat\u00bb<span class="dots"></span>'
+              : 'Esperant que el rival confirme \u00abpreparat\u00bb<span class="dots"></span>';
+          }
         }
       }
 

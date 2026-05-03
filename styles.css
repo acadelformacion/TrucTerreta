@@ -1895,7 +1895,7 @@ body {
   z-index: 0;
 }
 
-/* Pre-partida: tot el contingut visible sense scroll (PC i mòbil) */
+/* Pre-partida: centrat si cap; si no, desplaçament des de dalt (evita retall superior/inferior) */
 #waitingOverlay.overlay {
   box-sizing: border-box;
   min-height: 100vh;
@@ -1911,9 +1911,11 @@ body {
     max(6px, env(safe-area-inset-right, 0px))
     max(4px, env(safe-area-inset-bottom, 0px))
     max(6px, env(safe-area-inset-left, 0px));
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  align-items: safe center;
+  justify-content: safe center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .overlay.hidden {
@@ -2078,6 +2080,9 @@ body {
   font-size: 14px;
   color: var(--muted);
   min-height: 20px;
+}
+#waitingOverlay .waiting-status:not(.hidden) {
+  margin-bottom: clamp(6px, 1.2vmin, 12px);
 }
 .waiting-note {
   font-size: 11px;
@@ -2366,9 +2371,11 @@ body {
   padding: clamp(16px, 4vmin, 32px) clamp(12px, 3vmin, 24px);
   align-items: stretch;
   gap: clamp(12px, 3vmin, 24px);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   flex: 0 1 auto;
   justify-content: flex-start;
+  -webkit-overflow-scrolling: touch;
 }
 
 .waiting-head-block {
@@ -2418,7 +2425,7 @@ body {
 }
 #waitingOverlay .waiting-faceoff {
   gap: clamp(6px, 1.5vmin, 12px) clamp(8px, 2vmin, 16px);
-  margin: clamp(2px, 0.8vmin, 8px) 0;
+  margin: clamp(2px, 0.8vmin, 8px) 0 clamp(6px, 1.5vmin, 12px);
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -2639,8 +2646,8 @@ body:not([data-mode="2v2"]) .player-wait-slot {
   margin-top: 8px;
 }
 #waitingOverlay .waiting-actions {
-  gap: clamp(4px, 1vmin, 8px);
-  margin-top: clamp(2px, 0.6vmin, 6px);
+  gap: clamp(6px, 1.2vmin, 10px);
+  margin-top: clamp(6px, 1.5vmin, 12px);
   flex-shrink: 0;
 }
 
@@ -2654,6 +2661,40 @@ body:not([data-mode="2v2"]) .player-wait-slot {
 }
 #waitingOverlay .waiting-action-btn.waiting-start-btn {
   font-size: clamp(14px, 3vmin, 17px) !important;
+}
+
+@keyframes waiting-ready-cta {
+  0%, 100% {
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.35),
+      0 0 0 0 rgba(76, 175, 125, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 6px 22px rgba(0, 0, 0, 0.42),
+      0 0 22px 5px rgba(76, 175, 125, 0.55);
+    transform: scale(1.04);
+  }
+}
+
+.waiting-ready-btn {
+  background: linear-gradient(180deg, #4ecb85 0%, #2e9e5e 100%);
+  color: #0b1f12;
+  border: 1px solid rgba(78, 203, 133, 0.5);
+  font-weight: 800;
+}
+.waiting-ready-btn:hover {
+  filter: brightness(1.07);
+}
+#waitingOverlay .waiting-ready-btn:not(.hidden) {
+  animation: waiting-ready-cta 2s ease-in-out infinite;
+  min-height: clamp(48px, 11vmin, 58px);
+  align-self: center;
+  width: fit-content;
+  max-width: min(240px, 88vw);
+  padding-left: clamp(16px, 3.2vmin, 24px) !important;
+  padding-right: clamp(16px, 3.2vmin, 24px) !important;
 }
 
 @keyframes waiting-start-cta {
@@ -2750,6 +2791,8 @@ body:not([data-mode="2v2"]) .player-wait-slot {
   line-height: 1.25;
   min-height: 0;
   flex-shrink: 0;
+  text-align: center;
+  margin-bottom: clamp(4px, 1vmin, 8px);
 }
 #waitingOverlay .waiting-note {
   font-size: clamp(10px, 2.2vmin, 11px);
@@ -5044,9 +5087,10 @@ body.btn-large #actionBtns {
 }
 .lobby-chat-messages {
   flex: 1 1 auto;
+  min-height: 0;
   height: auto;
-  min-height: 60px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -5107,22 +5151,28 @@ body.btn-large #actionBtns {
 
 .lobby-chat-input-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   border-top: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.25);
   flex-shrink: 0;
+  min-height: 48px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
 }
 .lobby-chat-emoji-btn {
-  flex: 0 0 40px;
-  min-width: 40px;
-  min-height: 44px;
+  flex: 0 0 44px;
+  min-width: 44px;
+  width: 44px;
+  min-height: 48px;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   border-right: 1px solid var(--border);
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 1;
   cursor: pointer;
   padding: 0;
   opacity: 0.75;
@@ -5132,6 +5182,9 @@ body.btn-large #actionBtns {
 
 .lobby-chat-input {
   flex: 1;
+  align-self: stretch;
+  min-height: 48px;
+  box-sizing: border-box;
   background: transparent;
   border: none;
   outline: none;
@@ -5144,9 +5197,11 @@ body.btn-large #actionBtns {
 .lobby-chat-input::placeholder { color: var(--dim); }
 
 .lobby-chat-send {
-  flex: 0 0 46px;
-  min-width: 46px;
-  min-height: 44px;
+  flex: 0 0 48px;
+  min-width: 48px;
+  width: 48px;
+  min-height: 48px;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5181,16 +5236,22 @@ body.btn-large #actionBtns {
 #waitingOverlay .waiting-status {
   flex-shrink: 0;
 }
-#waitingOverlay .waiting-faceoff-card {
-  overflow-y: auto;
-}
+/* Xat: el scroll és a la llista; fila emoji+input sempre visible dins del panell */
 #waitingOverlay .lobby-chat-panel {
-  flex: 0 1 auto;
-  min-height: 200px;
-  max-height: min(380px, 42vh);
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
 }
 #waitingOverlay .lobby-chat-messages {
-  min-height: 160px;
+  flex: 0 1 auto;
+  min-height: 48px;
+  max-height: min(220px, 32vh);
+}
+@media (max-height: 640px) {
+  #waitingOverlay .lobby-chat-messages {
+    max-height: min(140px, 26vh);
+  }
 }
 
 /* ── Botó "Sentar-se ací" en espais buits (2v2) ── */

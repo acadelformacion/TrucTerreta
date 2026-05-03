@@ -96,7 +96,7 @@ import {
   clearOptimisticCard,
 } from "./renderGame.js";
 import { isBotActive } from "./bot.js";
-import { warmupMatchAssets } from "./assetPreloader.js";
+import { warmupMatchAssets, preloadAllTableBackgrounds } from "./assetPreloader.js";
 import { isSpritesheetReady, spritesheetReady } from "./spritesheet.js";
 let _actionInProgress = false;
 const $ = (id) => document.getElementById(id);
@@ -297,6 +297,8 @@ export function startSession(code) {
     tableBackground: cfg.tableBackground || "verde",
     timeoutMs: 1,
   }).catch(() => {});
+  // Precargar todos los fondos de mesa para que el cambio sea instantáneo
+  preloadAllTableBackgrounds();
 
   // Sobreescribir nuestro avatar en Firebase al reconectar,
   // por si hay datos de una sesión anterior

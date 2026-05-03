@@ -791,6 +791,7 @@ export function initStatsModal() {
     $("statsPoints").textContent = "...";
     $("statsStreak").textContent = "...";
     $("statsBestStreak").textContent = "...";
+    $("statsWinRate").textContent = "...";
 
     const user = auth.currentUser;
     if (!user || user.isAnonymous) {
@@ -800,6 +801,7 @@ export function initStatsModal() {
       $("statsPoints").textContent = "0";
       $("statsStreak").textContent = "0";
       $("statsBestStreak").textContent = "0";
+      $("statsWinRate").textContent = "0%";
       return;
     }
 
@@ -809,12 +811,16 @@ export function initStatsModal() {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        $("statsPlayed").textContent = data.gamesPlayed || 0;
-        $("statsWon").textContent = data.gamesWon || 0;
+        const played = data.gamesPlayed || 0;
+        const won = data.gamesWon || 0;
+        const winRate = played > 0 ? Math.round((won / played) * 100) : 0;
+        $("statsPlayed").textContent = played;
+        $("statsWon").textContent = won;
         $("statsLost").textContent = data.gamesLost || 0;
         $("statsPoints").textContent = data.totalPoints || 0;
         $("statsStreak").textContent = data.currentStreak || 0;
         $("statsBestStreak").textContent = data.bestStreak || 0;
+        $("statsWinRate").textContent = `${winRate}%`;
       } else {
         $("statsPlayed").textContent = "0";
         $("statsWon").textContent = "0";
@@ -822,6 +828,7 @@ export function initStatsModal() {
         $("statsPoints").textContent = "0";
         $("statsStreak").textContent = "0";
         $("statsBestStreak").textContent = "0";
+        $("statsWinRate").textContent = "0%";
       }
     } catch (e) {
       console.error("Error loading stats:", e);
@@ -831,6 +838,7 @@ export function initStatsModal() {
       $("statsPoints").textContent = "-";
       $("statsStreak").textContent = "-";
       $("statsBestStreak").textContent = "-";
+      $("statsWinRate").textContent = "-";
     }
   };
 
