@@ -18,6 +18,7 @@ import {
   onDisconnect,
   signInAnonymously,
   signOut,
+  handSlotNeedsSecretReveal,
 } from "./firebase.js";
 import {
   defaultState,
@@ -47,10 +48,12 @@ import {
   openPrivateCodeModal,
   configureLobby,
   changeSeat,
+  initStatsModal,
 } from "./lobby.js";
 import { sndBtn } from "./audio.js";
 import {
   stopConfetti,
+  animateScreenShake,
 } from "./animations.js";
 import {
   initChat,
@@ -81,6 +84,7 @@ import {
 } from "./avatars.js";
 import {
   renderAll,
+  getLastRoom,
   showTableMsg,
   showTableMsgLocal,
   resetHandIntroPlayed,
@@ -88,10 +92,30 @@ import {
   cancelPreGameRoomOnDisconnect,
   clearAbsenceTimers,
   getLastState,
+  clearOptimisticCard,
 } from "./renderGame.js";
+import { isBotActive } from "./bot.js";
 import { warmupMatchAssets } from "./assetPreloader.js";
+import { isSpritesheetReady, spritesheetReady } from "./spritesheet.js";
 let _actionInProgress = false;
 const $ = (id) => document.getElementById(id);
+
+function applyMatchConfig() {
+  applyConfig();
+  const table = $("table");
+  const bgCfgSection = $("cfgTableBackgroundSection");
+  const botMatch = isBotActive();
+  if (table) {
+    table.classList.remove("bg-bot");
+    if (botMatch) {
+      table.classList.forEach((cls) => {
+        if (cls.startsWith("bg-")) table.classList.remove(cls);
+      });
+      table.classList.add("bg-bot");
+    }
+  }
+  bgCfgSection?.classList.toggle("hidden", botMatch);
+}
 
 function setGuestAuthBusy(busy) {
   const overlay = $("guestAuthBusy");
@@ -176,7 +200,13 @@ const OFFSET = 10; // scores/trickWins stored +10
 
 // --- Session ------------------------------------------------------------------
 let unsubGame = null,
-  unsubStateStatus = null;
+  unsubStateStatus = null,
+  unsubSecretHand = null,
+  unsubBotSecretHand = null;
+/** Evita que un render async antic després de `await` pise un snap més nou (cartes al centre, mà, etc.). */
+let _wrappedRenderSeq = 0;
+let _mySecretHand = null,
+  _botSecretHand = null;
 let inactTimer = null;
 const uid = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -303,8 +333,37 @@ export function startSession(code) {
       $("screenGame").classList.remove("hidden");
     }
 
-    renderAll(data);
+    applyMatchConfig();
+    wrappedRenderAll(data);
   });
+
+  if (session.mySeat !== null) {
+    unsubSecretHand = onValue(ref(db, `secret_hands/${code}/hands/_${session.mySeat}`), (snap) => {
+      _mySecretHand = snap.val() || null;
+      session.secretHandMine = _mySecretHand;
+      if (session.roomRef) {
+        get(session.roomRef).then((s) => {
+          if (s.exists() && session.roomCode === code) {
+            wrappedRenderAll(s.val());
+          }
+        }).catch(() => {});
+      }
+    });
+
+    if (isBotActive()) {
+      unsubBotSecretHand = onValue(ref(db, `secret_hands/${code}/hands/_1`), (snap) => {
+        _botSecretHand = snap.val() || null;
+        session.botSecretHandForMutate = _botSecretHand;
+        if (session.roomRef) {
+          get(session.roomRef).then((s) => {
+            if (s.exists() && session.roomCode === code) {
+              wrappedRenderAll(s.val());
+            }
+          }).catch(() => {});
+        }
+      });
+    }
+  }
 
   // Refuerç: quan l'estat passa a "playing", alguns clients no rebien el snap de la sala a temps;
   // aquest camí curt força un render amb la sala completa.
@@ -317,7 +376,7 @@ export function startSession(code) {
       get(session.roomRef)
         .then((s) => {
           if (!s.exists() || session.roomCode !== code) return;
-          renderAll(s.val());
+          wrappedRenderAll(s.val());
         })
         .catch(() => {});
     },
@@ -349,6 +408,7 @@ export function startSession(code) {
 }
 
 export function detachRoomListeners() {
+  _wrappedRenderSeq++;
   if (unsubGame) {
     unsubGame();
     unsubGame = null;
@@ -357,6 +417,19 @@ export function detachRoomListeners() {
     unsubStateStatus();
     unsubStateStatus = null;
   }
+  if (unsubSecretHand) {
+    unsubSecretHand();
+    unsubSecretHand = null;
+  }
+  if (unsubBotSecretHand) {
+    unsubBotSecretHand();
+    unsubBotSecretHand = null;
+  }
+  _mySecretHand = null;
+  _botSecretHand = null;
+  session.secretHandMine = null;
+  session.botSecretHandForMutate = null;
+  clearOptimisticCard();
   if (unsubMsg) {
     unsubMsg();
     unsubMsg = null;
@@ -435,9 +508,54 @@ export async function tryJoinRoomFromInviteLink() {
 // Re-exportació per a game.js (importa syncAvatarPickAfterAuth des d'ací)
 export { syncAvatarPickAfterAuth };
 
+const wrappedRenderAll = async (data) => {
+  const seq = ++_wrappedRenderSeq;
+  if (!isSpritesheetReady()) {
+    await Promise.race([
+      spritesheetReady,
+      new Promise((res) => setTimeout(res, 3000)),
+    ]);
+  }
+  if (seq !== _wrappedRenderSeq) return;
+  if (data?.state?.hand?.hands) {
+    const hnRoom = Number(data.state.handNumber);
+    const seatK =
+      session.mySeat !== null ? `_${session.mySeat}` : null;
+    if (
+      seatK &&
+      _mySecretHand &&
+      Number(_mySecretHand.hn) === hnRoom &&
+      handSlotNeedsSecretReveal(data.state.hand.hands[seatK])
+    ) {
+      data.state.hand.hands[seatK] = {
+        a: _mySecretHand.a,
+        b: _mySecretHand.b,
+        c: _mySecretHand.c,
+      };
+    }
+    if (
+      isBotActive() &&
+      _botSecretHand &&
+      Number(_botSecretHand.hn) === hnRoom &&
+      handSlotNeedsSecretReveal(data.state.hand.hands["_1"])
+    ) {
+      data.state.hand.hands["_1"] = {
+        a: _botSecretHand.a,
+        b: _botSecretHand.b,
+        c: _botSecretHand.c,
+      };
+    }
+  }
+  if (seq !== _wrappedRenderSeq) return;
+  renderAll(data);
+};
+
 export function initApp() {
-  configureActions({ renderAll });
-  configureAvatars({ renderAll });
+  configureActions({
+    renderAll: wrappedRenderAll,
+    renderAllLastRoom: () => { const lr = getLastRoom(); if (lr) renderAll(lr); },
+  });
+  configureAvatars({ renderAll: wrappedRenderAll });
   configureLobby({ startSession });
   configureRenderer({ resetInactivity });
   initAuthFlow();
@@ -445,6 +563,7 @@ export function initApp() {
   initCreateRoomModal();
   initPrivateCodeModal();
   initLeaveConfirmModal();
+  initStatsModal();
   limpiarSalasAntiguas(); // sin await, que corra en segundo plano
   $("btn-crear-publica")?.addEventListener("click", () =>
     openCreateRoomModal("public"),
@@ -539,7 +658,7 @@ export function initApp() {
         ui.locked = false;
         get(session.roomRef)
           .then((snap) => {
-            if (snap?.val()) renderAll(snap.val());
+            if (snap?.val()) wrappedRenderAll(snap.val());
           })
           .catch(() => {});
       }, 200);
@@ -579,9 +698,10 @@ export function initApp() {
   });
 
   // --- NUEVO: Configuración -------------------------------------------------
-  applyConfig();
+  applyMatchConfig();
 
   $("configBtn").addEventListener("click", () => {
+    applyMatchConfig();
     $("configPanel").classList.toggle("hidden");
     // Marca el botón activo de cada sección
     const cfg = loadConfig();
@@ -605,6 +725,7 @@ export function initApp() {
       if (val === "true") val = true;
       if (val === "false") val = false;
       setConfig(key, val);
+      applyMatchConfig();
       // Actualiza visual de botones activos en esa sección
       document.querySelectorAll(`.cfg-opt[data-cfg="${key}"]`).forEach((b) => {
         b.classList.toggle("active", b.dataset.val === String(val));
@@ -626,7 +747,7 @@ export function initApp() {
         ui.locked = false;
         get(session.roomRef)
           .then((snap) => {
-            if (snap?.val()) renderAll(snap.val());
+            if (snap?.val()) wrappedRenderAll(snap.val());
           })
           .catch(() => {});
       }, 600);
@@ -636,6 +757,7 @@ export function initApp() {
     if (ui.locked) return;
     ui.locked = true;
     sndBtn();
+    animateScreenShake("high");
     showTableMsg(offerCallText("envit", "falta"), true);
     try {
       await startOffer("falta");
@@ -644,7 +766,7 @@ export function initApp() {
         ui.locked = false;
         get(session.roomRef)
           .then((snap) => {
-            if (snap?.val()) renderAll(snap.val());
+            if (snap?.val()) wrappedRenderAll(snap.val());
           })
           .catch(() => {});
       }, 600);
@@ -660,6 +782,8 @@ export function initApp() {
       : /retruc/i.test(trucBtnLabel)
         ? 3
         : 2;
+    if (trucLevel === 4) animateScreenShake("high");
+    else if (trucLevel === 3) animateScreenShake("low");
     showTableMsg(offerCallText("truc", trucLevel), true);
     try {
       await startOffer("truc");
@@ -668,7 +792,7 @@ export function initApp() {
         ui.locked = false;
         get(session.roomRef)
           .then((snap) => {
-            if (snap?.val()) renderAll(snap.val());
+            if (snap?.val()) wrappedRenderAll(snap.val());
           })
           .catch(() => {});
       }, 600);
@@ -686,7 +810,7 @@ export function initApp() {
         ui.locked = false;
         get(session.roomRef)
           .then((snap) => {
-            if (snap?.val()) renderAll(snap.val());
+            if (snap?.val()) wrappedRenderAll(snap.val());
           })
           .catch(() => {});
       }, 600);

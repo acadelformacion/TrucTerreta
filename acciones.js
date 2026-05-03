@@ -1,5 +1,5 @@
 // --- Acciones de partida (mutaciones via Firebase) ----------------------------
-import { session, mutate as mutateFirebase, get } from "./firebase.js";
+import { session, mutate as mutateFirebase, get, db, ref, set, serverTimestamp, functions, httpsCallable } from "./firebase.js";
 import { isBotActive } from "./bot.js";
 import * as Logica from "./logica.js";
 import {
@@ -62,7 +62,7 @@ const alreadyPlayed = (h, seat) => getPlayed(h, seat) !== null;
 
 function pushLog(st, text, meta) {
   st.logs = st.logs || [];
-  const row = { text, at: Date.now() };
+  const row = { text, at: serverTimestamp() };
   if (meta?.envitProof?.cards?.length)
     row.envitProof = {
       points: Number(meta.envitProof.points) || 0,
@@ -169,6 +169,7 @@ function resumeOffer(state) {
   if (r) {
     h.mode = r.mode;
     h.turn = r.turn;
+    h.turnStartedAt = serverTimestamp();
     // ¡AQUÍ ESTÁ LA MAGIA! Recuperamos la oferta anterior (el Truc) si la había
     h.pendingOffer = r.oldOffer || null;
   } else {
@@ -178,11 +179,19 @@ function resumeOffer(state) {
   h.resume = null;
 }
 
-const mutate = (fn) => mutateFirebase(fn, defaultState);
+const mutate = async (fn) => {
+  const res = await mutateFirebase(fn, defaultState);
+  if (session.roomCode) {
+    set(ref(db, `rooms/${session.roomCode}/lastActivity`), serverTimestamp()).catch(() => {});
+  }
+  return res;
+};
 
 let _renderAll = () => {};
-export function configureActions({ renderAll }) {
+let _renderAllLastRoom = () => {};
+export function configureActions({ renderAll, renderAllLastRoom }) {
   _renderAll = renderAll;
+  _renderAllLastRoom = renderAllLastRoom || (() => {});
 }
 
 /** Força render després de mutate (onValue sol no arriba o arriba tard). */
@@ -200,8 +209,11 @@ function pullRoomAndRender() {
 export const ui = { locked: false };
 
 export async function dealHand() {
-  await mutate((state) => {
-    const n = getNumSeats(state);
+  let numSeats = 2;
+  let handNumber = 0;
+  const ok = await mutate((state) => {
+    numSeats = getNumSeats(state);
+    const n = numSeats;
     // Comprovar que tots els seients tenen jugador
     for (let i = 0; i < n; i++) {
       if (!state.players?.[K(i)]) return false;
@@ -220,16 +232,28 @@ export async function dealHand() {
         if (!state.ready[K(i)]) return false;
       }
       state.mano = Math.floor(Math.random() * n);
-      state.openingIntroAt = Date.now();
+      state.openingIntroAt = serverTimestamp();
     }
-
+    
     state.hand = Logica.makeHand(state.mano, getNumSeats(state));
+    state.hand.turnStartedAt = serverTimestamp();
     state.status = "playing";
     // Evita que `lastAllTricks` de la mà anterior confonga el render entre mans / ofertes
     state.lastAllTricks = [];
     pushLog(state, `Ma #${real(state.handNumber) + 1}. Torn: J${state.mano}.`);
+    handNumber = state.handNumber;
     return true;
   });
+
+  if (ok && session.roomCode) {
+    try {
+      const repartir = httpsCallable(functions, "repartirCartas");
+      await repartir({ roomId: session.roomCode, numSeats, handNumber });
+    } catch (e) {
+      console.error("Error repartiendo cartas:", e);
+    }
+  }
+
   pullRoomAndRender();
 }
 
@@ -244,7 +268,7 @@ async function _doPlayCard(seat, card) {
     .querySelectorAll("#myCards .my-card-wrap")
     .forEach((w) => w.classList.remove("playable"));
   try {
-    await mutate((state) => {
+    const tx = await mutate((state) => {
       const h = state.hand;
       if (!h || state.status !== "playing" || h.status !== "in_progress")
         return false;
@@ -272,21 +296,19 @@ async function _doPlayCard(seat, card) {
         Logica.resolveTrick(state);
       } else {
         h.turn = _nextUnplayedSeat(h);
+        h.turnStartedAt = serverTimestamp();
         const isBaza1 = (h.trickHistory || []).length === 0;
         h.envitAvailable = isBaza1;
       }
       return true;
     });
+    if (!tx || tx.committed === false) {
+      throw new Error("PLAY_NOT_COMMITTED");
+    }
   } finally {
     setTimeout(() => {
       ui.locked = false;
-      if (session.roomRef) {
-        get(session.roomRef)
-          .then((snap) => {
-            if (snap.val()) _renderAll(snap.val());
-          })
-          .catch(() => {});
-      }
+      _renderAllLastRoom();
     }, 90);
   }
 }
@@ -351,6 +373,7 @@ function _startOfferCore(state, seat, kind) {
     };
     h.mode = "respond_envit";
     h.turn = toSeat;
+    h.turnStartedAt = serverTimestamp();
 
     const nom = state.players?.[K(seat)]?.name || `J${seat}`;
     pushLog(state, `${nom} canta ${kind === "falta" ? "FALTA" : "envit"}.`);
@@ -365,7 +388,7 @@ function _startOfferCore(state, seat, kind) {
     if (h.truc.state === "accepted" && h.truc.responder === seat) {
       trucLevel = Number(h.truc.acceptedLevel || 2) + 1;
       if (trucLevel > 4) return false;
-      if ((h.trickHistory || []).length <= (h.truc.acceptedAtTrick ?? -1)) return false;
+      if (!Logica.canSeatEscalateAcceptedTruc(h, seat)) return false;
     } else if (h.truc.state !== "none") return false;
 
     const toSeat = _respondingSeat(state, seat);
@@ -382,6 +405,7 @@ function _startOfferCore(state, seat, kind) {
     };
     h.mode = "respond_truc";
     h.turn = toSeat;
+    h.turnStartedAt = serverTimestamp();
 
     // Determinar si el equipo respondedor puede aún envidar:
     // - no se ha hecho ninguna baza
@@ -414,14 +438,33 @@ function _startOfferCore(state, seat, kind) {
 }
 
 export async function respondEnvit(choice) {
-  await mutate((state) => _respondEnvitCore(state, session.mySeat, choice));
+  let envitResult = null;
+  if (choice === "vull" && session.roomCode) {
+    try {
+      const resolver = httpsCallable(functions, "resolverEnvit");
+      const res = await resolver({ roomId: session.roomCode });
+      envitResult = res.data;
+    } catch (e) {
+      console.error("Error resolviendo envit:", e);
+      // Si falla la función, el mutate fallará o dará 0 puntos (comportamiento actual con *)
+    }
+  }
+  await mutate((state) => _respondEnvitCore(state, session.mySeat, choice, envitResult));
   pullRoomAndRender();
 }
 export async function respondEnvitAsBot(choice) {
-  await mutate((state) => _respondEnvitCore(state, 1, choice));
+  let envitResult = null;
+  if (choice === "vull" && session.roomCode) {
+    try {
+      const resolver = httpsCallable(functions, "resolverEnvit");
+      const res = await resolver({ roomId: session.roomCode });
+      envitResult = res.data;
+    } catch (e) {}
+  }
+  await mutate((state) => _respondEnvitCore(state, 1, choice, envitResult));
 }
 
-function _respondEnvitCore(state, seat, choice) {
+function _respondEnvitCore(state, seat, choice, envitResult = null) {
   const h = state.hand,
     offer = h?.pendingOffer;
   if (!h || state.status !== "playing" || h.status !== "in_progress")
@@ -462,12 +505,12 @@ function _respondEnvitCore(state, seat, choice) {
       }
     }
 
-    const v0 = bestV0;
-    const v1 = bestV1;
-    const envitWinner = v0 > v1 ? 0 : v1 > v0 ? 1 : teamOf(state.mano);
+    const v0 = envitResult ? envitResult.v0 : bestV0;
+    const v1 = envitResult ? envitResult.v1 : bestV1;
+    const envitWinner = envitResult ? envitResult.winnerTeam : (v0 > v1 ? 0 : v1 > v0 ? 1 : teamOf(state.mano));
     const perMa = v0 === v1;
 
-    const winnerFullHand = envitWinner === 0 ? bestHand0 : bestHand1;
+    const winnerFullHand = envitResult ? envitResult.winnerHand : (envitWinner === 0 ? bestHand0 : bestHand1);
     const visible = Logica.collectTableCards(h);
     const proof = Logica.bestEnvitProof(winnerFullHand, visible);
 
@@ -491,6 +534,7 @@ function _respondEnvitCore(state, seat, choice) {
       `Envit acceptat (${offer.level === "falta" ? "falta" : offer.level}).`,
     );
     resumeOffer(state);
+    h.turnStartedAt = serverTimestamp();
     return true;
   }
   if (choice === "no_vull") {
@@ -513,6 +557,7 @@ function _respondEnvitCore(state, seat, choice) {
     if (offer.level !== 2) return false;
     h.pendingOffer = { kind: "envit", level: 4, by: resp, to: caller };
     h.turn = caller;
+    h.turnStartedAt = serverTimestamp();
     h.mode = "respond_envit";
     h.envitAvailable = false;
     pushLog(state, "Torne a envit 4.");
@@ -527,6 +572,7 @@ function _respondEnvitCore(state, seat, choice) {
       faltaFromLevel: offer.level === 4 ? 4 : 2,
     };
     h.turn = caller;
+    h.turnStartedAt = serverTimestamp();
     h.mode = "respond_envit";
     h.envitAvailable = false;
     pushLog(state, "Envit de falta.");
@@ -565,10 +611,12 @@ function _respondTrucCore(state, seat, choice) {
       acceptedLevel: offer.level,
       acceptedBy: seat,
       acceptedAtTrick: (h.trickHistory || []).length,
+      acceptedAfterPlayCount: Logica.countCardsPlayedThisHand(h),
     };
     h.envitAvailable = false;
     pushLog(state, `Truc acceptat (${offer.level}).`);
     resumeOffer(state);
+    h.turnStartedAt = serverTimestamp();
     return true;
   }
   if (choice === "no_vull") {
@@ -588,6 +636,7 @@ function _respondTrucCore(state, seat, choice) {
     if (offer.level !== 2) return false;
     h.pendingOffer = { kind: "truc", level: 3, by: resp, to: caller };
     h.turn = caller;
+    h.turnStartedAt = serverTimestamp();
     h.mode = "respond_truc";
     h.envitAvailable = false;
     pushLog(state, "Retruque a 3.");
@@ -597,6 +646,7 @@ function _respondTrucCore(state, seat, choice) {
     if (offer.level !== 3) return false;
     h.pendingOffer = { kind: "truc", level: 4, by: resp, to: caller };
     h.turn = caller;
+    h.turnStartedAt = serverTimestamp();
     h.mode = "respond_truc";
     h.envitAvailable = false;
     pushLog(state, "Val 4 al truc.");

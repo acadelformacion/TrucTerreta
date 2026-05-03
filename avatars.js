@@ -1,5 +1,6 @@
 // --- avatars.js — Selecció i renderitzat d'avatars ---------------------------
 import { auth, db, session, ref, set, get } from "./firebase.js";
+import { isBotActive } from "./bot.js";
 import { getNumSeats, opponents, teammates } from "./teams.js";
 
 const K = (n) => `_${n}`;
@@ -323,14 +324,22 @@ export function renderWaitingSlots(room, state) {
     gav.innerHTML = avatarImgHtml(src);
     if (!String(gav.innerHTML).trim()) gav.classList.add("slot-game-av-empty");
 
-    const isReady = !!state.ready?.[K(seat)];
-    bd.classList.toggle("slot-badge-ready", isReady);
-    if (isReady) {
-      bd.textContent = "PREPARAT!";
-      bd.dataset.state = "ready";
+    if (isBotActive()) {
+      bd.classList.add("hidden");
+      bd.classList.remove("slot-badge-ready");
+      bd.textContent = "";
+      delete bd.dataset.state;
     } else {
-      bd.textContent = "Triant avatar...";
-      bd.dataset.state = "picking";
+      bd.classList.remove("hidden");
+      const isReady = !!state.ready?.[K(seat)];
+      bd.classList.toggle("slot-badge-ready", isReady);
+      if (isReady) {
+        bd.textContent = "✅ Preparat!";
+        bd.dataset.state = "ready";
+      } else {
+        bd.textContent = "Triant avatar...";
+        bd.dataset.state = "picking";
+      }
     }
   }
 }

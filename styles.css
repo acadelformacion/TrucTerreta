@@ -1420,6 +1420,13 @@ body {
     padding: 10px;
   }
 }
+
+.card-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* Imatge de carta (Media/Images/Cards) */
 .playing-card.use-img {
   padding: 0 !important;
@@ -1753,10 +1760,19 @@ body {
 .chat-msg {
   font-size: 13px;
   line-height: 1.4;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-align: left;
+}
+.chat-msg .chat-line-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
 .chat-msg .chat-author {
   font-weight: 700;
-  margin-right: 4px;
+  margin-right: 0;
 }
 .chat-msg.mine .chat-author {
   color: var(--gold);
@@ -1770,7 +1786,8 @@ body {
 .chat-msg .chat-time {
   font-size: 10px;
   color: var(--dim);
-  margin-left: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .chat-input-row {
   display: flex;
@@ -2173,6 +2190,12 @@ body {
   margin: 0 auto;
 }
 
+/* Profunditat: mà rival (1v1 dalt / 2v2 esquerra) més petita que la pròpia — segon pla */
+#rivalZone .rival-cards:not(.side-cards) {
+  transform: scale(0.85);
+  transform-origin: center bottom;
+}
+
 /* Targeta de l'overlay sala en espera */
 #waitingOverlay .overlay-card {
   background: rgba(20, 90, 45, 0.94) !important;
@@ -2311,8 +2334,18 @@ body {
   margin-bottom: 4px;
 }
 #waitingOverlay .waiting-head-block {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  column-gap: clamp(6px, 1.5vmin, 12px);
   margin-bottom: 0;
   flex-shrink: 0;
+}
+#waitingOverlay .waiting-head-center {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: center;
+  min-width: 0;
 }
 #waitingOverlay .waiting-head-block .ov-title {
   font-size: clamp(18px, 3.6vmin, 28px);
@@ -2511,21 +2544,18 @@ body {
   color: #edd27a;
 }
 
-.slot-badge-ready {
-  color: #0a160f !important;
-  background: linear-gradient(180deg, #7aecb3, #2ea043);
-  border-color: rgba(126, 236, 179, 0.85);
-  animation: badgeReadyGlow 1.45s ease-in-out infinite;
-}
-
-@keyframes badgeReadyGlow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(46, 160, 67, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 20px 5px rgba(110, 231, 168, 0.42);
-  }
+/* Etiqueta de text, no aspecte de botó */
+#waitingOverlay .slot-badge.slot-badge-ready {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #b8f5d4;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: clamp(2px, 0.45vmin, 5px) 0;
+  border-radius: 0;
+  animation: none;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
 }
 
 .waiting-vs {
@@ -2573,6 +2603,36 @@ body {
 }
 #waitingOverlay .waiting-action-btn.waiting-start-btn {
   font-size: clamp(14px, 3vmin, 17px) !important;
+}
+
+@keyframes waiting-start-cta {
+  0%,
+  100% {
+    box-shadow:
+      0 4px 18px rgba(0, 0, 0, 0.35),
+      0 0 0 0 rgba(232, 171, 42, 0.35);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 8px 28px rgba(0, 0, 0, 0.42),
+      0 0 26px 6px rgba(232, 171, 42, 0.5);
+    transform: scale(1.04);
+  }
+}
+
+#waitingOverlay #startBtn.waiting-start-btn:not(:disabled) {
+  width: fit-content;
+  max-width: min(200px, 85vw);
+  min-height: clamp(48px, 12vmin, 60px);
+  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(16px, 3.2vmin, 24px) !important;
+  padding-right: clamp(16px, 3.2vmin, 24px) !important;
+  padding-top: clamp(14px, 3vmin, 20px) !important;
+  padding-bottom: clamp(14px, 3vmin, 20px) !important;
+  animation: waiting-start-cta 2s ease-in-out infinite;
 }
 
 #waitingInviteWhatsappBtn.waiting-invite-side-btn {
@@ -2646,11 +2706,38 @@ body {
   flex-shrink: 0;
 }
 
-#waitingOverlay .btn-volver {
-  margin-top: clamp(2px, 0.6vmin, 6px);
-  padding: clamp(5px, 1.2vmin, 8px) clamp(10px, 2vmin, 14px);
-  font-size: clamp(11px, 2.5vmin, 13px);
+#waitingOverlay .waiting-close-room-btn {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  position: relative;
+  z-index: 3;
+  margin: 0;
+  display: inline-block;
+  max-width: none;
+  font-size: clamp(10px, 2.4vmin, 13px);
+  font-weight: 700;
+  padding: clamp(6px, 1.4vmin, 8px) clamp(10px, 2.2vmin, 14px);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ef5350 0%, #b71c1c 100%);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 16px rgba(183, 28, 28, 0.45);
   flex-shrink: 0;
+  transition:
+    filter 0.15s ease,
+    transform 0.07s ease;
+}
+
+#waitingOverlay .waiting-close-room-btn:hover {
+  opacity: 1;
+  filter: brightness(1.08);
+}
+
+#waitingOverlay .waiting-close-room-btn:active {
+  transform: translateY(1px);
 }
 
 /* Graella d'avatars més compacta només a la pre-partida */
@@ -3507,6 +3594,12 @@ body {
   perspective: 400px;
 }
 
+/* 1v1: carta jugada del rival (fila de dalt) més petita — segon pla */
+.trick-cell-rival {
+  transform: scale(0.82);
+  transform-origin: center center;
+}
+
 @media (min-width: 1024px) {
   .playing-card,
   .card-back.card-back-hand,
@@ -3797,6 +3890,7 @@ body {
   cursor: not-allowed;
   transform: none !important;
   box-shadow: none !important;
+  animation: none !important;
 }
 
 /* Avatar gelat (espera) */
@@ -3956,6 +4050,30 @@ body {
 #table.bg-bg3 > *:not(#deckPile) {
   position: relative;
   z-index: 1;
+}
+
+/* Fons fix per a partida contra bot */
+#table.bg-bot {
+  background: transparent !important;
+}
+
+#table.bg-bot::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image:
+    linear-gradient(rgba(24, 24, 24, 0.42), rgba(14, 14, 14, 0.46)),
+    url("./Media/Images/Others/fondo-bot.webp");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(2px) brightness(0.88);
+  transform: scale(1.05);
+  z-index: -1;
+  pointer-events: none;
 }
 /* Botons grans (preferència) */
 body.btn-large .abtn {
@@ -4234,6 +4352,7 @@ body.btn-large #actionBtns {
   #waitingInviteWhatsappBtn:hover,
   .av-opt:hover,
   .btn-volver:hover,
+  .waiting-close-room-btn:hover,
   .config-btn:hover,
   .cfg-close:hover,
   .cfg-opt:hover,
@@ -4270,7 +4389,12 @@ body.btn-large #actionBtns {
 #table.table-2v2 #teammateZone    { grid-area: teammate; }
 #table.table-2v2 #centerZone      { grid-area: center; }
 #table.table-2v2 #myZone          { grid-area: player; }
-#table.table-2v2 #deckPile        { display: none; }
+/* El mazo ha de mesurar-se amb getBoundingClientRect per al repartiment (display:none → rect 0). */
+#table.table-2v2 #deckPile {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* Zones laterals (rivals esquerra/dreta) */
 .side-player-zone {
@@ -4398,6 +4522,14 @@ body.btn-large #actionBtns {
   box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.45);
 }
 
+/* Montons dels altres jugadors (no el teu) més petits — profunditat */
+[data-mode="2v2"] .trick-pile.trick-pos-top,
+[data-mode="2v2"] .trick-pile.trick-pos-left,
+[data-mode="2v2"] .trick-pile.trick-pos-right {
+  transform: scale(0.86);
+  transform-origin: center center;
+}
+
 /* ── Waiting overlay 2v2 ── */
 .waiting-team {
   display: flex;
@@ -4501,6 +4633,8 @@ body.btn-large #actionBtns {
   height: auto;
   min-width: 80px;
   gap: -18px;
+  transform: scale(0.92);
+  transform-origin: center bottom;
 }
 .teammate-cards .rival-card-slot {
   margin-left: -20px !important;
@@ -4833,12 +4967,17 @@ body.btn-large #actionBtns {
 }
 .lc-msg {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px;
+  gap: 8px;
   font-size: 13px;
   line-height: 1.4;
+  text-align: left;
   animation: lc-msg-in 0.2s ease both;
+}
+.lc-msg .lc-line-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
 @keyframes lc-msg-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -4854,14 +4993,12 @@ body.btn-large #actionBtns {
 .lc-msg .lc-text {
   color: var(--text);
   word-break: break-word;
-  flex: 1;
-  min-width: 0;
 }
 .lc-msg .lc-time {
   font-size: 10px;
   color: var(--dim);
   flex-shrink: 0;
-  align-self: flex-end;
+  margin-left: auto;
 }
 .lobby-emoji-picker {
   display: flex;
@@ -4944,8 +5081,9 @@ body.btn-large #actionBtns {
 @media (hover: none) {
   .chat-emoji-btn:hover,
   .lobby-chat-emoji-btn:hover,
-#waitingOverlay .waiting-faceoff-card > * {
-  flex-shrink: 0;
+  #waitingOverlay .waiting-faceoff-card > * {
+    flex-shrink: 0;
+  }
 }
 
 /* Ensure overlay items do not shrink to zero and cause UI to disappear */
@@ -4959,8 +5097,11 @@ body.btn-large #actionBtns {
 }
 #waitingOverlay .lobby-chat-panel {
   flex: 0 1 auto;
-  min-height: 80px;
-  max-height: 200px;
+  min-height: 200px;
+  max-height: min(380px, 42vh);
+}
+#waitingOverlay .lobby-chat-messages {
+  min-height: 160px;
 }
 
 /* ── Botó "Sentar-se ací" en espais buits (2v2) ── */
@@ -4998,4 +5139,14 @@ body.btn-large #actionBtns {
 }
 .sit-here-btn.hidden {
   display: none !important;
+}
+
+#trickGrid .playing-card {
+  width: 100%;
+  height: 100%;
+}
+
+#trickGrid .card-gsap-wrapper {
+  width: 100%;
+  height: 100%;
 }

@@ -1,0 +1,38 @@
+{
+  "rules": {
+    "rooms": {
+      ".read": true,
+      "$room": {
+        ".write": "auth != null"
+      }
+    },
+    "userMeta": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "secret_hands": {
+      "$room": {
+        "hands": {
+          "$seat": {
+            ".read": "auth != null && (root.child('rooms/'+$room+'/state/players/'+$seat+'/uid').val() === auth.uid || (root.child('rooms/'+$room+'/state/players/'+$seat+'/guest').val() === true && root.child('rooms/'+$room+'/state/players/_0/uid').val() === auth.uid))",
+            ".write": false
+          }
+        },
+        "envitPoints": {
+          "$seat": {
+            ".read": "auth != null && (root.child('rooms/'+$room+'/state/players/'+$seat+'/uid').val() === auth.uid || (root.child('rooms/'+$room+'/state/players/'+$seat+'/guest').val() === true && root.child('rooms/'+$room+'/state/players/_0/uid').val() === auth.uid))",
+            ".write": false
+          }
+        }
+      }
+    }
+  }
+}

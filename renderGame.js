@@ -1,7 +1,7 @@
 // --- renderGame.js — Motor de renderizado visual ------------------------------
 import { db, session, ref, get, set, onDisconnect, remove } from "./firebase.js";
 import * as Logica from "./logica.js";
-import { teamOf, getNumSeats, teammates, opponents } from "./teams.js";
+import { teamOf, getNumSeats, teammates, opponents, playOrder } from "./teams.js";
 import {
   defaultState,
   ui,
@@ -22,10 +22,10 @@ import { sndCard, sndBtn, sndTick, sndWin, sndLose, detectSounds } from "./audio
 import {
   animateHUDPoints,
   playVersusIntro,
-  playCenterTableMessage,
   animateRivalActionTableMsg,
   animatePlay,
   animateMyHandDealFromDeck,
+  showHoldCenterTableMessage,
   startTurnTimer,
   stopTurnTimer,
   playGameOverPresentation,
@@ -49,6 +49,7 @@ import { bumpStoredWinsIfWonGame } from "./auth.js";
 import { setLobbyMsg } from "./lobby.js";
 import { isVibrationEnabled } from "./config.js";
 import { isBotActive, botAct, resetBotMemory, updateBotMemory } from "./bot.js";
+import { getCardStyle } from "./spritesheet.js";
 
 // --- Helpers locales ----------------------------------------------------------
 const $ = (id) => document.getElementById(id);
@@ -127,10 +128,28 @@ let _gameEndSummaryLatch = false;
 let _openingAnimPendingKey = "";
 let _openingAnimDoneKey = "";
 let _openingAnimRunning = false;
+/** Repartiment inicial complet (totes les zones, ordre CCW des del mano). */
+let _openingFullDealKey = "";
+let _openingFullDealDoneKey = "";
+let _openingFullDealSeatIdx = 0;
+let _openingFullDealAnimating = false;
+/** Retorn de showHoldCenterTableMessage("Bona sort!") */
+let _dismissBonaSort = null;
 let _lastIncomingOfferVibrationKey = "";
 let _botThinking = false;
 let _prevRivalPlayedCount = 0;
 let _prevPendingOfferStr = "";
+
+export let optimisticCardIndex = null;
+export function setOptimisticCard(index) { optimisticCardIndex = index; }
+export function clearOptimisticCard() {
+  optimisticCardIndex = null;
+  const optEl = document.getElementById("optimistic-card-el");
+  if (!optEl) return;
+  const g = globalThis.gsap;
+  if (g) g.killTweensOf(optEl);
+  optEl.remove();
+}
 
 // Cuenta atrás entre manos
 let betweenTimer = null;
@@ -230,21 +249,24 @@ export function getLastState() { return _lastState; }
 
 // --- Builders de cartas -------------------------------------------------------
 export function buildCard(card) {
+  if (card === "*" || !card || card === EMPTY_CARD) return buildBack();
   const { num, suit } = Logica.parseCard(card);
+  if (Number.isNaN(num)) return buildBack();
   const suitLetter =
     { oros: "o", copas: "c", espadas: "e", bastos: "b" }[suit] || "";
-  const imgCode = `${num}${suitLetter}`;
-  
+
   const gsapWrap = document.createElement("div");
   gsapWrap.className = "card-gsap-wrapper";
 
   const el = document.createElement("div");
   el.className = `playing-card ${SUITS[suit]?.cls || ""} use-img`;
-  const img = document.createElement("img");
+  const img = document.createElement("div");
   img.className = "card-art";
-  img.alt = `${num}${suitLetter}`;
-  img.draggable = false;
-  img.src = `./Media/Images/Cards/${imgCode}.jpg`;
+  if (card && card !== EMPTY_CARD && card !== "*") {
+    Object.assign(img.style, getCardStyle(card), {
+      backgroundRepeat: "no-repeat",
+    });
+  }
   el.appendChild(img);
   
   gsapWrap.appendChild(el);
@@ -311,7 +333,43 @@ function bindMyCardPlayable(wrap, cel, card, myCardsZone) {
     );
     const randomSoundIndex = Math.floor(Math.random() * 15);
     sndCard(randomSoundIndex);
-    animatePlay(cel, buildCard(card), () => playCard(card));
+    
+    setOptimisticCard(card);
+    
+    const g = globalThis.gsap;
+    const slot = document.getElementById("trickGrid");
+    const fr = wrap.getBoundingClientRect();
+    const to = slot ? slot.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 80, height: 114 };
+    
+    wrap.id = "optimistic-card-el";
+    wrap.style.cssText = `left:${fr.left}px;top:${fr.top}px;width:${fr.width}px;height:${fr.height}px;position:fixed;pointer-events:none;z-index:200;`;
+    document.body.appendChild(wrap);
+
+    if (g) {
+      const dx = to.left + to.width / 2 - (fr.left + fr.width / 2);
+      const dy = to.top + to.height / 2 - (fr.top + fr.height / 2);
+      const rot = Math.random() * 14 - 7;
+      g.set(wrap, { transformPerspective: 400, rotationX: 25 });
+      g.to(wrap, {
+        x: dx,
+        y: dy,
+        rotation: rot,
+        rotationX: 25,
+        scale: 0.72,
+        duration: 0.45,
+        ease: "back.out(1.2)"
+      });
+    }
+
+    playCard(card).catch(() => {
+      optimisticCardIndex = null;
+      if (g) g.killTweensOf(wrap);
+      wrap.removeAttribute("id");
+      played = false;
+      wrap.remove();
+      _prevHandsKey = "";
+      if (_lastRoom) renderAll(_lastRoom);
+    });
   };
 
   wrap.addEventListener(
@@ -404,10 +462,18 @@ function envitProofInnerHtml(proof) {
     const { num, suit } = Logica.parseCard(card);
     const suitLetter =
       { oros: "o", copas: "c", espadas: "e", bastos: "b" }[suit] || "";
-    const imgCode = `${num}${suitLetter}`;
     const cls = SUITS[suit]?.cls || "";
-    const src = `./Media/Images/Cards/${imgCode}.jpg`;
-    return `<div class="playing-card ${cls} use-img playing-card--log-mini"><img class="card-art" src="${src}" alt="" draggable="false"></div>`;
+    if (!card || card === EMPTY_CARD || card === "*") {
+      return `<div class="playing-card ${cls} use-img playing-card--log-mini"><div class="card-art"></div></div>`;
+    }
+    const st = getCardStyle(card);
+    const style = [
+      `background-image:${st.backgroundImage || "none"}`,
+      `background-position:${st.backgroundPosition || "0 0"}`,
+      `background-size:${st.backgroundSize || "auto"}`,
+      "background-repeat:no-repeat",
+    ].join(";");
+    return `<div class="playing-card ${cls} use-img playing-card--log-mini"><div class="card-art" style="${style}"></div></div>`;
   });
   const perMaSuffix = proof.perMa ? " (per m\u00e0)" : "";
   return `<div class="sum-envit-proof">${bits.join("")}<span class="sum-envit-pts">${proof.points} punts${perMaSuffix}</span></div>`;
@@ -565,7 +631,10 @@ function buildScoreSummary(state) {
 function stopBetween() {
   if (betweenTimer != null) clearTimeout(betweenTimer);
   betweenTimer = null;
-  $("countdownOverlay").classList.add("hidden");
+  // No ocultar si el resumen de fin de partida está usando el mismo overlay.
+  if (gameEndSummaryTimer == null) {
+    $("countdownOverlay").classList.add("hidden");
+  }
 }
 
 function stopGameEndSummary() {
@@ -657,12 +726,21 @@ function startBetween(summaryHtml, extraDelay = 0, state = null) {
  * Detects if the zone uses vertical stacking (side-cards) or horizontal (top/bottom)
  * and adjusts offsets accordingly.
  */
-function renderPlayerZone(zoneEl, handObj) {
+/**
+ * @param {"normal"|"empty"|"dealIntro"} [zoneMode]
+ */
+function renderPlayerZone(zoneEl, handObj, zoneMode = "normal") {
   if (!zoneEl) return;
+  if (zoneMode === "empty") {
+    zoneEl.replaceChildren();
+    zoneEl.setAttribute("data-count", "0");
+    return;
+  }
   zoneEl.replaceChildren();
   const cards = fromHObj(handObj);
   const n = cards.length;
   zoneEl.setAttribute("data-count", String(n));
+  const dealIntro = zoneMode === "dealIntro";
   const isVertical = zoneEl.classList.contains("side-cards");
   for (let i = 0; i < n; i++) {
     const s = document.createElement("div");
@@ -675,7 +753,11 @@ function renderPlayerZone(zoneEl, handObj) {
       const xoffs  = n === 3 ? [-44, 0, 44] : n === 2 ? [-24, 24] : [0];
       s.style.cssText = `transform:translateX(${xoffs[i] || 0}px) rotate(${angles[i] || 0}deg);z-index:${i + 1};`;
     }
-    s.appendChild(buildBack());
+    if (dealIntro) {
+      s.style.opacity = "0";
+      s.style.transition = "none";
+    }
+    s.appendChild(dealIntro ? buildHandDealBack() : buildBack());
     zoneEl.appendChild(s);
   }
 }
@@ -695,6 +777,180 @@ function _ccwRivals(me) {
     if (teamOf(s) !== teamOf(me)) rivals.push(s);
   }
   return rivals; // [rivalDret, rivalEsquerra]
+}
+
+/** Clau estable per mano dins la sala (repartiment animat cada mano). */
+function getHandDealAnimKeyFromState(state) {
+  if (state.status !== "playing" || !state.hand) return "";
+  if (state.hand.status !== "in_progress") return "";
+  const hn = real(state.handNumber || OFFSET);
+  return `${session.roomCode || ""}|hn:${hn}`;
+}
+
+function myHandReadyForDealAnim(state) {
+  const h = state.hand;
+  if (!h || h.status !== "in_progress") return false;
+  const mine = fromHObj(h.hands?.[K(session.mySeat)]);
+  if (!mine.length) return false;
+  if (mine.includes("*") || mine.includes(EMPTY_CARD)) return false;
+  return true;
+}
+
+/**
+ * Alinia la seqüència de repartiment amb la mano actual tan bon punt hi ha `state.hand`
+ * (no esperem cartes sense *): així cada mano nova rep `dealIntro` / opacitat 0 als rivals.
+ */
+function syncHandDealSequenceState(state) {
+  if (state.status !== "playing" || !state.hand) return;
+  const dealKey = getHandDealAnimKeyFromState(state);
+  if (!dealKey) return;
+  if (dealKey === _openingFullDealDoneKey) return;
+  if (_openingFullDealKey !== dealKey) {
+    _openingFullDealKey = dealKey;
+    _openingFullDealSeatIdx = 0;
+    _openingFullDealDoneKey = "";
+    _openingFullDealAnimating = false;
+  }
+}
+
+function openingFullDealBlocking(state) {
+  const k = getHandDealAnimKeyFromState(state);
+  return !!k && _openingFullDealDoneKey !== k;
+}
+
+/**
+ * @returns {"normal"|"empty"|"dealIntro"}
+ */
+function openingDealZoneModeForSeat(state, seat) {
+  if (!state.hand) return "normal";
+  const k = getHandDealAnimKeyFromState(state);
+  if (!k || _openingFullDealDoneKey === k) return "normal";
+  const order = playOrder(state.mano, state);
+  const idx = order.indexOf(seat);
+  if (idx < 0) return "normal";
+  if (idx > _openingFullDealSeatIdx) return "empty";
+  if (idx < _openingFullDealSeatIdx) return "normal";
+  return "dealIntro";
+}
+
+function zoneElForSeat(state, seat) {
+  if (seat === session.mySeat) return $("myCards");
+  const n = getNumSeats(state);
+  if (n === 2) return $("rivalCards");
+  const me = session.mySeat;
+  const tmSeat = (me + 2) % 4;
+  if (seat === tmSeat) return $("teammateCards");
+  const [rivalR, rivalL] = _ccwRivals(me);
+  if (seat === rivalR) return $("rivalRightCards");
+  if (seat === rivalL) return $("rivalCards");
+  return null;
+}
+
+function finishOpeningFullDeal() {
+  if (typeof _dismissBonaSort === "function") {
+    _dismissBonaSort();
+    _dismissBonaSort = null;
+  }
+  _openingFullDealDoneKey = _openingFullDealKey;
+  _openingFullDealAnimating = false;
+  _introPlayed = true;
+  if (_lastRoom) renderAll(_lastRoom);
+}
+
+function tryRunOpeningDealAnimation(state) {
+  const dk = getHandDealAnimKeyFromState(state);
+  if (!dk || _openingFullDealDoneKey === dk) return;
+  if (!myHandReadyForDealAnim(state)) return;
+  if (_openingFullDealAnimating) return;
+  const h = state.hand;
+  if (!h) return;
+  const dealOrder = playOrder(state.mano, state);
+  if (_openingFullDealSeatIdx >= dealOrder.length) {
+    finishOpeningFullDeal();
+    return;
+  }
+  const seat = dealOrder[_openingFullDealSeatIdx];
+  const zone = zoneElForSeat(state, seat);
+  if (!zone) return;
+  const wraps =
+    seat === session.mySeat
+      ? zone.querySelectorAll(".my-card-wrap")
+      : zone.querySelectorAll(".rival-card-slot");
+  if (wraps.length !== 3) return;
+
+  _openingFullDealAnimating = true;
+  const myCardsForFlip =
+    seat === session.mySeat ? fromHObj(h.hands?.[K(seat)]) : [];
+
+  const onDealAnimationComplete = () => {
+    _openingFullDealAnimating = false;
+    _openingFullDealSeatIdx++;
+    if (_lastRoom) renderAll(_lastRoom);
+  };
+
+  if (seat === session.mySeat) {
+    animateMyHandDealFromDeck(wraps, {
+      onDealAnimationComplete,
+      flipAllSubtimeline(allWraps) {
+        const g = globalThis.gsap;
+        if (!g || allWraps.length !== 3) return null;
+        const backs = allWraps
+          .map((w) => w.querySelector(".card-back-hand"))
+          .filter(Boolean);
+        if (backs.length !== 3) return null;
+        const sub = g.timeline();
+        sub.to(backs, {
+          scaleX: 0,
+          duration: 0.1,
+          ease: "power2.in",
+          transformOrigin: "50% 50%",
+        });
+        sub.call(function () {
+          const faces = [];
+          allWraps.forEach((w, idx) => {
+            const face = buildCard(myCardsForFlip[idx]);
+            face.style.transition = "none";
+            g.set(face, { scaleX: 0, transformOrigin: "50% 50%" });
+            w.replaceChildren(face);
+            faces.push(face);
+          });
+          sub.to(faces, {
+            scaleX: 1,
+            duration: 0.12,
+            ease: "power2.out",
+            onComplete: () => {
+              allWraps.forEach((w, idx) => {
+                const face = w.querySelector(".playing-card");
+                if (!face) return;
+                face.style.removeProperty("transition");
+                g.set(face, { clearProps: "scaleX,transformOrigin" });
+              });
+            },
+          });
+        });
+        return sub;
+      },
+      onDealAborted(wrapsAborted) {
+        wrapsAborted.forEach((w, idx) => {
+          const c = myCardsForFlip[idx];
+          if (!w || !c) return;
+          if (w.querySelector(".card-back-hand")) {
+            w.replaceChildren(buildCard(c));
+          }
+        });
+      },
+    });
+  } else {
+    const g = globalThis.gsap;
+    animateMyHandDealFromDeck(wraps, {
+      onDealAnimationComplete,
+      // Mateixa branca stack+stagger que el jugador (sense girar cares).
+      flipAllSubtimeline() {
+        if (!g) return null;
+        return g.timeline();
+      },
+    });
+  }
 }
 
 /**
@@ -729,7 +985,11 @@ function renderRivalZones(state) {
   if (!is2v2) {
     // 1v1: renderitzar al rival al rivalCards com sempre
     const rivalSeat = other(session.mySeat);
-    renderPlayerZone($("rivalCards"), state.hand?.hands?.[K(rivalSeat)]);
+    renderPlayerZone(
+      $("rivalCards"),
+      state.hand?.hands?.[K(rivalSeat)],
+      openingDealZoneModeForSeat(state, rivalSeat),
+    );
     // Nom i avatar del rival
     const rn = $("rivalName");
     if (rn) rn.textContent = pName(state, rivalSeat);
@@ -739,14 +999,26 @@ function renderRivalZones(state) {
   // 2v2: company sempre al seient oposat (me+2)%4
   const me = session.mySeat;
   const tmSeat = (me + 2) % 4;
-  renderPlayerZone($("teammateCards"), state.hand?.hands?.[K(tmSeat)]);
+  renderPlayerZone(
+    $("teammateCards"),
+    state.hand?.hands?.[K(tmSeat)],
+    openingDealZoneModeForSeat(state, tmSeat),
+  );
   const tn = $("teammateName");
   if (tn) tn.textContent = pName(state, tmSeat);
 
   // Rivals: [rivalDret, rivalEsquerra] en ordre CCW
   const [rivalR, rivalL] = _ccwRivals(me);
-  renderPlayerZone($("rivalCards"), state.hand?.hands?.[K(rivalL)]);
-  renderPlayerZone($("rivalRightCards"), state.hand?.hands?.[K(rivalR)]);
+  renderPlayerZone(
+    $("rivalCards"),
+    state.hand?.hands?.[K(rivalL)],
+    openingDealZoneModeForSeat(state, rivalL),
+  );
+  renderPlayerZone(
+    $("rivalRightCards"),
+    state.hand?.hands?.[K(rivalR)],
+    openingDealZoneModeForSeat(state, rivalR),
+  );
   const rn = $("rivalName");
   if (rn) rn.textContent = pName(state, rivalL);
   const rrn = $("rivalRightName");
@@ -759,6 +1031,14 @@ export function resetHandIntroPlayed() {
   _openingAnimPendingKey = "";
   _openingAnimDoneKey = "";
   _openingAnimRunning = false;
+  _openingFullDealKey = "";
+  _openingFullDealDoneKey = "";
+  _openingFullDealSeatIdx = 0;
+  _openingFullDealAnimating = false;
+  if (typeof _dismissBonaSort === "function") {
+    _dismissBonaSort();
+    _dismissBonaSort = null;
+  }
 }
 
 // --- Mis cartas ---------------------------------------------------------------
@@ -771,7 +1051,32 @@ function renderMyCards(state) {
     z.replaceChildren();
     return;
   }
-  const myCards = fromHObj(h.hands?.[K(session.mySeat)]);
+  let myCards = fromHObj(h.hands?.[K(session.mySeat)]);
+  const playedNow = getPlayed(h, session.mySeat);
+  if (playedNow) {
+    myCards = myCards.filter((c) => c !== playedNow);
+  }
+  if (optimisticCardIndex !== null) {
+    myCards = myCards.filter((c) => c !== optimisticCardIndex);
+  }
+  // Wait for secret hands to be injected before rendering anything
+  if (myCards.includes("*") || myCards.includes(EMPTY_CARD)) return;
+
+  const orchestratingOpening = openingFullDealBlocking(state);
+  if (orchestratingOpening) {
+    const order = playOrder(state.mano, state);
+    const myIdx = order.indexOf(session.mySeat);
+    if (myIdx > _openingFullDealSeatIdx) {
+      if (z._hoverCleanups) {
+        z._hoverCleanups.forEach(fn => fn && typeof fn === "function" ? fn() : null);
+      }
+      z._hoverCleanups = [];
+      z.replaceChildren();
+      _prevHandsKey = `deal-wait|${_openingFullDealSeatIdx}|${session.mySeat}`;
+      return;
+    }
+  }
+
   const played = alreadyPlayed(h, session.mySeat);
   const _ch = h.trickHistory || [];
   const _handDecided =
@@ -791,8 +1096,13 @@ function renderMyCards(state) {
     !h.pendingOffer &&
     state.status === "playing" &&
     h.status === "in_progress" &&
-    !_handDecided;
-  const handsKey = myCards.join(",") + "|" + canPlay;
+    !_handDecided &&
+    !openingFullDealBlocking(state);
+
+  const dealTag = orchestratingOpening
+    ? `|od:${_openingFullDealSeatIdx}`
+    : "";
+  const handsKey = myCards.join(",") + "|" + canPlay + dealTag;
   if (handsKey === _prevHandsKey && z.children.length === myCards.length)
     return;
   _prevHandsKey = handsKey;
@@ -804,11 +1114,29 @@ function renderMyCards(state) {
 
   z.replaceChildren();
 
-  const handDealIntro =
+  const iAmCurrentDealSeat =
+    orchestratingOpening &&
+    playOrder(state.mano, state).indexOf(session.mySeat) ===
+      _openingFullDealSeatIdx;
+
+  const handDealIntroOrchestrated =
+    orchestratingOpening &&
+    iAmCurrentDealSeat &&
     !!globalThis.gsap &&
     emptyBefore &&
     myCards.length === 3 &&
+    !myCards.includes("*");
+
+  const handDealIntroLegacy =
+    !orchestratingOpening &&
+    !!globalThis.gsap &&
+    emptyBefore &&
+    myCards.length === 3 &&
+    !myCards.includes("*") &&
     !_introPlayed;
+
+  const handDealIntro =
+    handDealIntroOrchestrated || handDealIntroLegacy;
 
   myCards.forEach((card) => {
     const wrap = document.createElement("div");
@@ -828,7 +1156,10 @@ function renderMyCards(state) {
     z.appendChild(wrap);
   });
 
-  if (handDealIntro && z.querySelectorAll(".my-card-wrap").length === 3) {
+  if (
+    handDealIntroLegacy &&
+    z.querySelectorAll(".my-card-wrap").length === 3
+  ) {
     _introPlayed = true;
     void z.offsetHeight;
     animateMyHandDealFromDeck(z.querySelectorAll(".my-card-wrap"), {
@@ -1157,6 +1488,16 @@ function renderTrick(state) {
 
 // --- Acciones ----------------------------------------------------------------
 function renderActions(state) {
+  const h = state.hand;
+  const curOfferStr = h?.pendingOffer ? `${h.pendingOffer.kind}:${h.pendingOffer.level}` : "";
+  if (curOfferStr && curOfferStr !== _prevPendingOfferStr) {
+    const isHighAlert = (h.pendingOffer.kind === "truc" && Number(h.pendingOffer.level) === 4) || (h.pendingOffer.kind === "envit" && h.pendingOffer.level === "falta");
+    const isLowAlert = (h.pendingOffer.kind === "truc" && Number(h.pendingOffer.level) === 3) || (h.pendingOffer.kind === "envit" && Number(h.pendingOffer.level) === 4);
+    if (isHighAlert) animateScreenShake("high");
+    else if (isLowAlert) animateScreenShake("low");
+  }
+  _prevPendingOfferStr = curOfferStr;
+
   if (ui.locked) {
     ["envitBtn", "faltaBtn", "trucBtn", "mazoBtn"].forEach((id) => {
       const b = $(id);
@@ -1168,7 +1509,6 @@ function renderActions(state) {
     if (om) om.classList.add("hidden");
     return;
   }
-  const h = state.hand;
   const ra = $("responseArea"),
     om = $("offerMsg");
 
@@ -1187,17 +1527,32 @@ function renderActions(state) {
     return;
   }
 
+  if (openingFullDealBlocking(state)) {
+    ["envitBtn", "faltaBtn", "trucBtn", "mazoBtn"].forEach((id) => {
+      const b = $(id);
+      if (b) b.classList.add("hidden");
+    });
+    const raDeal = $("responseArea"),
+      omDeal = $("offerMsg");
+    if (raDeal) {
+      raDeal.innerHTML = "";
+      raDeal.classList.add("hidden");
+    }
+    if (omDeal) omDeal.classList.add("hidden");
+    const smDeal = $("statusMsg");
+    if (smDeal) {
+      smDeal.textContent = "Repartint cartes\u2026";
+      smDeal.classList.remove("my-turn");
+    }
+    $("actionPanel").style.display = "";
+    return;
+  }
+
   $("actionPanel").style.display = "";
   const myT = h.turn === session.mySeat,
     norm = h.mode === "normal",
     envDone = h.envit.state !== "none";
   const played = alreadyPlayed(h, session.mySeat);
-  const curOfferStr = h.pendingOffer ? `${h.pendingOffer.kind}:${h.pendingOffer.level}` : "";
-  if (curOfferStr && curOfferStr !== _prevPendingOfferStr) {
-    const isHighAlert = (h.pendingOffer.kind === "truc" && Number(h.pendingOffer.level) === 4) || (h.pendingOffer.kind === "envit" && h.pendingOffer.level === "falta");
-    if (isHighAlert) animateScreenShake();
-  }
-  _prevPendingOfferStr = curOfferStr;
 
   const tricksDone = (h.trickHistory || []).length;
   const noTricksPlayed = tricksDone === 0;
@@ -1235,6 +1590,10 @@ function renderActions(state) {
       if (ui.locked) return;
       ui.locked = true;
       sndBtn();
+      
+      if (cls === "btn-envit-3" || cls === "btn-truc-3") animateScreenShake("high");
+      else if (cls === "btn-envit-2" || cls === "btn-truc-2") animateScreenShake("low");
+
       const callText =
         cls === "btn-envit-1"
           ? offerCallText("envit", 2)
@@ -1329,12 +1688,10 @@ function renderActions(state) {
       }
       if (!played) {
         const trucNone = h.truc.state === "none";
-        const iAccepted =
-          h.truc.state === "accepted" && h.truc.acceptedBy === session.mySeat;
-        const canEscalate =
-          iAccepted &&
-          Number(h.truc.acceptedLevel || 0) < 4 &&
-          (h.trickHistory || []).length > (h.truc.acceptedAtTrick ?? -1);
+        const canEscalate = Logica.canSeatEscalateAcceptedTruc(
+          h,
+          session.mySeat,
+        );
         if (trucNone || canEscalate) {
           const tb = $("trucBtn");
           if (tb) {
@@ -1468,11 +1825,15 @@ function canBotActInState(state, botSeat) {
         (h.pendingOffer.kind === "truc" && h.mode === "respond_truc"))
     );
   }
+  const botCards = fromHObj(h.hands?.[K(botSeat)]);
+  if (botCards.includes("*") || botCards.includes(EMPTY_CARD)) return false;
+
   return h.mode === "normal" && !alreadyPlayed(h, botSeat);
 }
 
 function scheduleBotIfNeededFromGameState(state) {
   if (!isBotActive() || _botThinking) return;
+  if (openingFullDealBlocking(state)) return;
   if (session.mySeat !== 0 && session.mySeat !== 1) return;
   const botSeat = other(session.mySeat);
   if (!canBotActInState(state, botSeat)) return;
@@ -1505,13 +1866,7 @@ function scheduleBotIfNeededFromGameState(state) {
       .finally(() => {
         _botThinking = false;
         if (!didRunAction) return;
-        if (!session.roomRef) return;
-        get(session.roomRef)
-          .then((snap) => {
-            const room = snap.val();
-            if (room) renderAll(room);
-          })
-          .catch(() => {});
+        if (_lastRoom) renderAll(_lastRoom);
       });
   }, botDelayMs);
 }
@@ -1768,9 +2123,21 @@ function renderRematchStatus(state) {
   }
 }
 
+export function getLastRoom() { return _lastRoom; }
+
 // --- RENDER PRINCIPAL --------------------------------------------------------
 export function renderAll(room) {
   const state = room?.state || defaultState();
+  if (optimisticCardIndex !== null) {
+    const _myHandCards = state.hand
+      ? fromHObj(state.hand.hands?.[K(session.mySeat)])
+      : [];
+    if (!_myHandCards.includes(optimisticCardIndex)) {
+      clearOptimisticCard();
+      _prevTrickKey = "";
+    }
+  }
+
   const hideChatVsBot = isBotActive();
   const gameChatPanel = $("chatPanel");
   const waitingChatPanel = $("lobbyChatPanel");
@@ -1857,6 +2224,8 @@ export function renderAll(room) {
     _prevTrickKey = "";
     _prevHandKey = hKey;
     _prevRivalPlayedCount = 0;
+    clearOptimisticCard();
+    _introPlayed = false;
   }
   renderHUD(state);
   $("myName").textContent = pName(state, session.mySeat);
@@ -1928,17 +2297,14 @@ export function renderAll(room) {
         if (isBotActive() && _lastRoom?.state) {
           scheduleBotIfNeededFromGameState(_lastRoom.state);
         }
-        const afterMsg = playCenterTableMessage("Bona sort!");
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              _openingAnimDoneKey = openingAnimKey;
-              _openingAnimRunning = false;
-              if (_lastRoom) renderAll(_lastRoom);
-            }, 500);
-          }),
-        );
-        return afterMsg;
+        if (typeof _dismissBonaSort === "function") {
+          _dismissBonaSort();
+          _dismissBonaSort = null;
+        }
+        _dismissBonaSort = showHoldCenterTableMessage("Bona sort!");
+        _openingAnimDoneKey = openingAnimKey;
+        _openingAnimRunning = false;
+        if (_lastRoom) renderAll(_lastRoom);
       })
       .catch(() => {})
       .finally(() => {
@@ -1996,6 +2362,7 @@ export function renderAll(room) {
     return;
   }
 
+  syncHandDealSequenceState(state);
   renderRivalZones(state);
   updateRivalTimer(state);
   renderMyCards(state);
@@ -2019,11 +2386,45 @@ export function renderAll(room) {
   }
   renderActions(state);
   renderLog(state);
+  tryRunOpeningDealAnimation(state);
   const bothJoined = bothPlayersJoined(state);
+
+  if (state.status === "abandoned") {
+    _betweenCountdownLatch = false;
+    stopBetween();
+    stopTurnTimer();
+    if ($("waitingOverlay")) $("waitingOverlay").classList.add("hidden");
+    if ($("gameOverOverlay")) $("gameOverOverlay").classList.add("hidden");
+    
+    let abModal = $("abandonedModal");
+    if (!abModal) {
+      abModal = document.createElement("div");
+      abModal.id = "abandonedModal";
+      abModal.className = "game-over-overlay";
+      abModal.style.zIndex = "9999";
+      abModal.innerHTML = `
+        <div style="background:rgba(0,0,0,0.85); padding:24px; border-radius:12px; text-align:center; border:1px solid var(--gold);">
+          <h2 style="color:var(--gold); margin-bottom:12px;">Sala inactiva</h2>
+          <p style="margin-bottom:20px;">La partida ha finalitzat per inactivitat.</p>
+          <button id="abModalLeaveBtn" class="lbtn lbtn-primary">Tornar al lobby</button>
+        </div>
+      `;
+      document.body.appendChild(abModal);
+      $("abModalLeaveBtn").addEventListener("click", () => {
+        abModal.classList.add("hidden");
+        const goLeaveBtn = document.getElementById("goLeaveBtn");
+        if (goLeaveBtn) goLeaveBtn.click();
+        else window.location.reload();
+      });
+    }
+    abModal.classList.remove("hidden");
+    return;
+  }
 
   if (state.status === "game_over") {
     _betweenCountdownLatch = false;
-    stopBetween();
+    // Solo detener el between si no hay ya un resumen de fin de partida activo.
+    if (gameEndSummaryTimer == null) stopBetween();
     stopTurnTimer();
     $("waitingOverlay").classList.add("hidden");
     const animKey = `${session.roomCode}|${state.winner}|${getScore(state, session.mySeat)}-${getScore(state, other(session.mySeat))}|${state.logs?.[0]?.at ?? ""}|${state.gameEndReason || ""}`;
@@ -2237,7 +2638,7 @@ export function renderAll(room) {
       h.pendingOffer?.to === session.mySeat;
     const tk = `${real(state.handNumber)}-${Logica.getTrickIndex(h)}-${h.turn}-${h.mode}-${alreadyPlayed(h, session.mySeat) ? 1 : 0}`;
     if (tk !== prevTurnKey) {
-      startTurnTimer(myTurn && h.status === "in_progress");
+      startTurnTimer(myTurn && h.status === "in_progress", h.turnStartedAt);
       prevTurnKey = tk;
     }
   }

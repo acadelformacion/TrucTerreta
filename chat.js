@@ -86,7 +86,7 @@ export function initChat(code) {
       const t = new Date(m.at);
       const hh = t.getHours().toString().padStart(2, "0");
       const mm = t.getMinutes().toString().padStart(2, "0");
-      div.innerHTML = `<span class="chat-author">${esc(m.name)}:</span> <span class="chat-text">${esc(m.text)}</span> <span class="chat-time">${hh}:${mm}</span>`;
+      div.innerHTML = `<span class="chat-line-main"><span class="chat-author">${esc(m.name)}:</span> <span class="chat-text">${esc(m.text)}</span></span><span class="chat-time">${hh}:${mm}</span>`;
       frag.appendChild(div);
     });
     area.replaceChildren(frag);
@@ -210,7 +210,7 @@ export function initLobbyChat(code) {
       const t = new Date(m.at);
       const hh = t.getHours().toString().padStart(2, "0");
       const mm = t.getMinutes().toString().padStart(2, "0");
-      div.innerHTML = `<span class="lc-author">${esc(m.name)}</span><span class="lc-text">${esc(m.text)}</span><span class="lc-time">${hh}:${mm}</span>`;
+      div.innerHTML = `<span class="lc-line-main"><span class="lc-author">${esc(m.name)}:</span> <span class="lc-text">${esc(m.text)}</span></span><span class="lc-time">${hh}:${mm}</span>`;
       area.appendChild(div);
     });
     area.scrollTop = area.scrollHeight;

@@ -1,6 +1,9 @@
 import { session } from './firebase.js';
 import { isSoundEnabled } from './config.js';
-import { mustPlayCardOnlyThisTrick } from './logica.js';
+import {
+  mustPlayCardOnlyThisTrick,
+  canSeatEscalateAcceptedTruc,
+} from './logica.js';
 
 // ── CONSTANTES ────────────────────────────────────────────────
 const BOT_SEAT = 1;
@@ -670,7 +673,7 @@ function buildActionMask(state, seat) {
       if (tr?.state === 'accepted') {
         if (tr.responder !== seat) canTruc = false;
         else if (Number(tr.acceptedLevel||2)+1 > 4) canTruc = false;
-        else if ((h.trickHistory||[]).length <= (tr.acceptedAtTrick ?? -1)) canTruc = false;
+        else if (!canSeatEscalateAcceptedTruc(h, seat)) canTruc = false;
       } else if (tr?.state !== 'none') canTruc = false;
       if (!noOffersMatada && canTruc && nc > 0) mask[5] = 1.0;
     }

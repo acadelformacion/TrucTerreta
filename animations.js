@@ -2,6 +2,7 @@
 import { sndTick, sndPoint } from "./audio.js";
 import { timeoutTurn } from "./acciones.js";
 import { isVibrationEnabled } from "./config.js";
+import { getServerTime } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -47,37 +48,61 @@ export function stopTurnTimer() {
   setRing("rivalTimerArc", "rivalTimerRing", 0);
 }
 
-export function startTurnTimer(isMyTurn) {
+export function startTurnTimer(isMyTurn, turnStartedAt) {
   stopTurnTimer();
   if (isMyTurn && lastTurnWasMine !== true) {
     vibrateMyTurnStart();
   }
   lastTurnWasMine = !!isMyTurn;
-  let rem = TURN_SECS;
+
+  // Sincronització: temps transcorregut segons el servidor
+  const now = getServerTime();
+  const start = Number(turnStartedAt || now);
+  const elapsed = (now - start) / 1000;
+  let rem = Math.max(0, TURN_SECS - elapsed);
+
   const myWrap = $("myAvatarContainer");
   const rivWrap = $("rivalAvatarContainer");
   if (isMyTurn) {
     if (myWrap) myWrap.classList.add("turn-active");
     if (rivWrap) rivWrap.classList.remove("turn-active");
-    setRing("myTimerArc", "myTimerRing", 100);
+    setRing("myTimerArc", "myTimerRing", (rem / TURN_SECS) * 100);
     setRing("rivalTimerArc", "rivalTimerRing", 0);
   } else {
     if (rivWrap) rivWrap.classList.add("turn-active");
     if (myWrap) myWrap.classList.remove("turn-active");
     setRing("myTimerArc", "myTimerRing", 0);
-    setRing("rivalTimerArc", "rivalTimerRing", 100);
+    setRing("rivalTimerArc", "rivalTimerRing", (rem / TURN_SECS) * 100);
   }
+
+  // Si ja ha passat el temps, timeout immediat si és el meu torn
+  if (rem <= 0) {
+    if (isMyTurn) timeoutTurn();
+    return;
+  }
+
   turnTimerArm = setTimeout(() => {
     turnTimerArm = null;
     turnTimer = setInterval(() => {
-      rem--;
-      const pct = Math.max(0, (rem / TURN_SECS) * 100);
+      // Recalcular rem basat en el temps absolut per evitar deriva del setInterval
+      const nowTick = getServerTime();
+      const elapsedTick = (nowTick - start) / 1000;
+      rem = Math.max(0, TURN_SECS - elapsedTick);
+      
+      const pct = (rem / TURN_SECS) * 100;
       if (isMyTurn) {
         setRing("myTimerArc", "myTimerRing", pct);
       } else {
         setRing("rivalTimerArc", "rivalTimerRing", pct);
       }
-      if (rem >= 1 && rem <= 5) sndTick();
+      
+      // So de tick en els últims segons (arrodonit per sonar 1 cop per segon)
+      const secInt = Math.ceil(rem);
+      if (secInt >= 1 && secInt <= 5) {
+         // Només sonar si estem prop del "segon exacte" (heurística)
+         if (Math.abs(rem - secInt) < 0.1) sndTick();
+      }
+
       if (rem <= 0) {
         stopTurnTimer();
         if (isMyTurn) timeoutTurn();
@@ -341,6 +366,18 @@ export function playCenterTableMessage(text, durationMs = 1400) {
   });
 }
 
+/** Missatge central sense durada fixa; retorna `dismiss()` per eliminar-lo. */
+export function showHoldCenterTableMessage(text) {
+  const msg = document.createElement("div");
+  msg.className = "table-msg-bubble msg-center start-hand-msg";
+  msg.textContent = String(text || "").toUpperCase();
+  document.querySelectorAll(".start-hand-msg").forEach((el) => el.remove());
+  document.body.appendChild(msg);
+  return () => {
+    msg.remove();
+  };
+}
+
 // --- Animació de carta voladora -----------------------------------------------
 // flyEl és l'element de carta ja construït pel cridador (buildCard al mòdul de render).
 export function animatePlay(cardEl, flyEl, onDone) {
@@ -422,15 +459,23 @@ export function animateRivalPlay(el) {
   });
 }
 
-export function animateScreenShake() {
+export function animateScreenShake(intensity = "high") {
   const g = globalThis.gsap;
   const table = document.getElementById("table");
   if (!g || !table) return;
   g.killTweensOf(table);
-  g.fromTo(table,
-    { x: -3, y: 2, rotation: -0.2 },
-    { x: 3, y: -2, rotation: 0.2, yoyo: true, repeat: 5, duration: 0.06, clearProps: "all", ease: "none" }
-  );
+  
+  if (intensity === "high") {
+    g.fromTo(table,
+      { x: -3, y: 2, rotation: -0.2 },
+      { x: 3, y: -2, rotation: 0.2, yoyo: true, repeat: 5, duration: 0.06, clearProps: "all", ease: "none" }
+    );
+  } else if (intensity === "low") {
+    g.fromTo(table,
+      { x: -1.5, y: 1, rotation: -0.1 },
+      { x: 1.5, y: -1, rotation: 0.1, yoyo: true, repeat: 3, duration: 0.06, clearProps: "all", ease: "none" }
+    );
+  }
 }
 
 export function animateTrickCollect() {
@@ -518,6 +563,34 @@ function revealDealWrapsIfAborted(wraps) {
 }
 
 /**
+ * Centre del mazo en pantalla per animar des d'allà. Si #deckPile no té mida vàlida
+ * (p.ex. abans tenia display:none en 2v2), usa zona central / taula com a fallback.
+ */
+function resolveDeckCenterPx() {
+  const deckPile = $("deckPile");
+  const deckRect = deckPile?.getBoundingClientRect();
+  if (deckRect && deckRect.width >= 2 && deckRect.height >= 2) {
+    const deckOnLeft = deckRect.left < window.innerWidth / 2;
+    const gcx = deckOnLeft ? deckRect.left + deckRect.width : deckRect.left;
+    const gcy = deckRect.top + deckRect.height / 2;
+    return { gcx, gcy };
+  }
+  const cz = $("centerZone");
+  if (cz) {
+    const r = cz.getBoundingClientRect();
+    const gcx = r.left - Math.min(88, Math.max(48, r.width * 0.12));
+    const gcy = r.top + r.height / 2;
+    return { gcx, gcy };
+  }
+  const tb = document.getElementById("table");
+  if (tb) {
+    const r = tb.getBoundingClientRect();
+    return { gcx: r.left + 36, gcy: r.top + r.height / 2 };
+  }
+  return { gcx: window.innerWidth * 0.06, gcy: window.innerHeight * 0.42 };
+}
+
+/**
  * Primera mà: cartes des del mazo lateral; opcionalment vol paral·lel cap a un munt
  * i `flipAllSubtimeline` per girar-les totes juntes.
  * @param {NodeListOf<Element>|Element[]} wraps - `.my-card-wrap`
@@ -525,30 +598,26 @@ function revealDealWrapsIfAborted(wraps) {
  *   flipSubtimeline?: (wrap: Element, index: number) => unknown;
  *   flipAllSubtimeline?: (wraps: Element[]) => unknown;
  *   onDealAborted?: (wraps: Element[]) => void;
+ *   onDealAnimationComplete?: () => void;
  * }} [options]
  */
 export function animateMyHandDealFromDeck(wraps, options = {}) {
-  const { flipSubtimeline, flipAllSubtimeline, onDealAborted } = options;
+  const { flipSubtimeline, flipAllSubtimeline, onDealAborted, onDealAnimationComplete } =
+    options;
   const g = globalThis.gsap;
-  const deckPile = $("deckPile");
-  if (!g || !deckPile || !wraps?.length) {
+  if (!g || !wraps?.length) {
     revealDealWrapsIfAborted(wraps);
     onDealAborted?.(Array.from(wraps));
+    onDealAnimationComplete?.();
     return;
   }
 
-  const deckRect = deckPile.getBoundingClientRect();
-  if (deckRect.width < 2 || deckRect.height < 2) {
-    revealDealWrapsIfAborted(wraps);
-    onDealAborted?.(Array.from(wraps));
-    return;
-  }
-
-  const deckOnLeft = deckRect.left < window.innerWidth / 2;
-  const gcx = deckOnLeft ? deckRect.left + deckRect.width : deckRect.left;
-  const gcy = deckRect.top + deckRect.height / 2;
+  const { gcx, gcy } = resolveDeckCenterPx();
 
   const list = Array.from(wraps);
+  list.forEach((el) => {
+    el.style.transition = "none";
+  });
   const parent = list[0]?.parentElement;
   if (parent) void parent.offsetHeight;
 
@@ -587,6 +656,7 @@ export function animateMyHandDealFromDeck(wraps, options = {}) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           list.forEach((el) => el.style.removeProperty("transition"));
+          onDealAnimationComplete?.();
         });
       });
     },

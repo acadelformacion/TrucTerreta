@@ -300,11 +300,9 @@ export function bestEnvitProof(cards, visibleSet) {
  */
 export function makeHand(mano, numSeats = 2) {
   const n = numSeats === 4 ? 4 : 2;
-  const deck = shuffle(buildDeck());
-  // Repartir 3 cartes a cada jugador
   const hands = {};
   for (let i = 0; i < n; i++) {
-    hands[K(i)] = toHObj(deck.slice(i * 3, i * 3 + 3));
+    hands[K(i)] = { a: "*", b: "*", c: "*" };
   }
   // played: sempre present amb EMPTY_CARD per a que Firebase no borre el node
   const played = {};
@@ -367,6 +365,40 @@ export function mustPlayCardOnlyThisTrick(h, seat) {
   if (h.trickLead !== seat) return false;
   if (getPlayed(h, seat)) return false;
   return true;
+}
+
+/** Cartes ja tirades en la mà actual (compta `played`). */
+export function countCardsPlayedThisHand(h) {
+  const n = h?.numSeats || 2;
+  let c = 0;
+  for (let i = 0; i < n; i++) {
+    if (getPlayed(h, i)) c++;
+  }
+  return c;
+}
+
+/**
+ * Després de dir vull al truc: el respondedor pot pujar (retruc / val 4)
+ * quan hi ha una baza nova des de l'acceptació, o almenys una carta més jugada
+ * que en el moment del vull (ex.: la del rival en la mateixa basa).
+ */
+export function canResponderRaiseTruc(h) {
+  const tr = h?.truc;
+  if (!tr || tr.state !== "accepted") return false;
+  const thr = (h.trickHistory || []).length;
+  const atTrick = tr.acceptedAtTrick ?? -1;
+  if (thr > atTrick) return true;
+  const snap = tr.acceptedAfterPlayCount;
+  if (snap !== undefined && snap !== null)
+    return countCardsPlayedThisHand(h) > snap;
+  return thr > atTrick;
+}
+
+export function canSeatEscalateAcceptedTruc(h, seat) {
+  const tr = h?.truc;
+  if (!tr || tr.state !== "accepted" || tr.responder !== seat) return false;
+  if (Number(tr.acceptedLevel || 0) >= 4) return false;
+  return canResponderRaiseTruc(h);
 }
 
 // --- Game logic ---------------------------------------------------------------

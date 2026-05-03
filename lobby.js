@@ -14,7 +14,8 @@ import {
 import { defaultState, buildDefaultState } from "./acciones.js";
 import * as Logica from "./logica.js";
 import { GUEST_LOBBY_AVATAR, BOT_AVATAR, firebaseValueForChoice } from "./avatars.js";
-import { auth } from "./firebase.js";
+import { auth, firestore } from "./firebase.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { initBot, setBotActive, resetBotMemory } from "./bot.js";
 
 const $ = (id) => document.getElementById(id);
@@ -764,4 +765,79 @@ export function openCreateRoomModal(visibility = "public") {
 }
 export function openPrivateCodeModal(mode) {
   _openPrivateCodeModal(mode);
+}
+
+export function initStatsModal() {
+  const modal = $("statsModal");
+  const backdrop = $("statsModalBackdrop");
+  const closeBtn = $("statsModalClose");
+  const openBtn = $("btn-estadisticas");
+
+  if (!modal || !backdrop || !closeBtn || !openBtn) return;
+
+  const hide = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+
+  const show = async () => {
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+
+    // Reset while loading
+    $("statsPlayed").textContent = "...";
+    $("statsWon").textContent = "...";
+    $("statsLost").textContent = "...";
+    $("statsPoints").textContent = "...";
+    $("statsStreak").textContent = "...";
+    $("statsBestStreak").textContent = "...";
+
+    const user = auth.currentUser;
+    if (!user || user.isAnonymous) {
+      $("statsPlayed").textContent = "0";
+      $("statsWon").textContent = "0";
+      $("statsLost").textContent = "0";
+      $("statsPoints").textContent = "0";
+      $("statsStreak").textContent = "0";
+      $("statsBestStreak").textContent = "0";
+      return;
+    }
+
+    try {
+      const docRef = doc(firestore, "players", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        $("statsPlayed").textContent = data.gamesPlayed || 0;
+        $("statsWon").textContent = data.gamesWon || 0;
+        $("statsLost").textContent = data.gamesLost || 0;
+        $("statsPoints").textContent = data.totalPoints || 0;
+        $("statsStreak").textContent = data.currentStreak || 0;
+        $("statsBestStreak").textContent = data.bestStreak || 0;
+      } else {
+        $("statsPlayed").textContent = "0";
+        $("statsWon").textContent = "0";
+        $("statsLost").textContent = "0";
+        $("statsPoints").textContent = "0";
+        $("statsStreak").textContent = "0";
+        $("statsBestStreak").textContent = "0";
+      }
+    } catch (e) {
+      console.error("Error loading stats:", e);
+      $("statsPlayed").textContent = "-";
+      $("statsWon").textContent = "-";
+      $("statsLost").textContent = "-";
+      $("statsPoints").textContent = "-";
+      $("statsStreak").textContent = "-";
+      $("statsBestStreak").textContent = "-";
+    }
+  };
+
+  openBtn.addEventListener("click", show);
+  closeBtn.addEventListener("click", hide);
+  backdrop.addEventListener("click", hide);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) hide();
+  });
 }

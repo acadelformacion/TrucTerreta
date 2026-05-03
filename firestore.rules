@@ -1,0 +1,12 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /players/{userId} {
+      // Allow users to read their own stats
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Nobody can write from the client. Only Cloud Function can write.
+      allow write: if false;
+    }
+  }
+}

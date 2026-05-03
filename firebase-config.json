@@ -1,0 +1,14 @@
+{
+  "version": "2",
+  "projectNumber": "922530958932",
+  "projectId": "trucvalencia-12345",
+  "appId": "1:922530958932:web:84fe1d9386f5ea2d6f67c1",
+  "realtimeDatabaseInstanceUri": "https://trucvalencia-12345-default-rtdb.europe-west1.firebasedatabase.app",
+  "realtimeDatabaseUrl": "",
+  "storageBucket": "trucvalencia-12345.firebasestorage.app",
+  "locationId": "",
+  "apiKey": "AIzaSyBHQ3hSWToVKzADI9eUlCNONbi_lN_TTAI",
+  "authDomain": "trucvalencia-12345.firebaseapp.com",
+  "messagingSenderId": "922530958932",
+  "measurementId": "G-VSTR2KB00Q"
+}

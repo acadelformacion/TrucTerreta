@@ -13,6 +13,7 @@ import {
   detachRoomListeners,
   syncAvatarPickAfterAuth,
 } from "./ui.js";
+import { loadSpritesheet } from "./spritesheet.js";
 
 const WINS_LS_PREFIX = "truc_wins_";
 /** Sufix numèric estable per sessió (001–999) per a usuaris anònims de Firebase. */
@@ -94,6 +95,12 @@ async function applySignedInUi(user) {
   const pantallaInicio = document.getElementById("pantalla-inicio");
   const pantallaLobby = document.getElementById("pantalla-lobby");
   if (!pantallaInicio || !pantallaLobby) return;
+
+  try {
+    await loadSpritesheet();
+  } catch (e) {
+    console.error("loadSpritesheet:", e);
+  }
 
   pantallaInicio.classList.add("hidden");
   pantallaLobby.classList.remove("hidden");
