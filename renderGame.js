@@ -46,7 +46,6 @@ import {
   renderWaitingSlots,
 } from "./avatars.js";
 import { bumpStoredWinsIfWonGame } from "./auth.js";
-import { setLobbyMsg } from "./lobby.js";
 import { isVibrationEnabled } from "./config.js";
 import { isBotActive, botAct, resetBotMemory, updateBotMemory } from "./bot.js";
 import { getCardStyle } from "./spritesheet.js";
@@ -2526,20 +2525,21 @@ export function renderAll(room) {
       const numSeats = getNumSeats(state);
       const is2v2 = numSeats === 4;
 
-      // In 2v2 the WhatsApp button is inside slot-player-1 which already has a player;
-      // move it below the faceoff section to avoid overlapping the slot card.
+      // WhatsApp: 1v1 dins del slot del convidat (part inferior); 2v2 sota la graella faceoff.
       const waBtn = $("waitingInviteWhatsappBtn");
       if (waBtn) {
         const nJoinedForWa = Object.keys(state.players || {}).length;
         const roomFull = nJoinedForWa >= numSeats;
         waBtn.classList.toggle("hidden", isBotActive() || roomFull);
-        if (!isBotActive() && !roomFull && is2v2) {
-          // Reattach just below faceoff (abans de l'estat) per no tapar slot-player-1
-          const faceoff = $("waitingFaceoff");
-          const statusEl = $("waitingStatus");
+        const faceoff = $("waitingFaceoff");
+        const statusEl = $("waitingStatus");
+        const slot1 = $("slot-player-1");
+        if (is2v2) {
           if (faceoff && statusEl && waBtn.parentElement !== faceoff.parentElement) {
             faceoff.parentElement?.insertBefore(waBtn, statusEl);
           }
+        } else if (slot1 && waBtn.parentElement !== slot1) {
+          slot1.appendChild(waBtn);
         }
       }
       $("waitingCodeRow")?.classList.toggle("hidden", hideWaitingRoomCode);

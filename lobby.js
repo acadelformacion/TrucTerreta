@@ -360,7 +360,7 @@ export async function joinRoom() {
   }
   session.mySeat = assignedSeat ?? 1;
   saveLS(name, code, session.mySeat);
-  setLobbyMsg(`Unit com J${session.mySeat}.`, "good");
+  setLobbyMsg("", "");
   _startSession(code);
 }
 

@@ -447,6 +447,7 @@ async function leaveRoom() {
   if (!session.roomCode || session.mySeat === null) {
     $("screenLobby").classList.remove("hidden");
     $("screenGame").classList.add("hidden");
+    setLobbyMsg("", "");
     return;
   }
   const code = session.roomCode;
@@ -467,6 +468,7 @@ async function leaveRoom() {
   $("gameOverOverlay")?.classList.add("hidden");
   $("screenLobby").classList.remove("hidden");
   $("screenGame").classList.add("hidden");
+  setLobbyMsg("", "");
 }
 
 function initLegalModal() {

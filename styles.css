@@ -1108,36 +1108,30 @@ body {
   color: #7ee787;
 }
 
-/* HUD — marcador sempre al centre del viewport; laterals es compacten */
+/* HUD — graella 1fr | marcador (auto) | 1fr: el centre només ocupa el que cal */
 #hud {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 50;
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
+  column-gap: 6px;
   box-sizing: border-box;
   padding: 6px 10px;
   height: 56px;
   background: rgba(18, 52, 42, 0.92);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
-  gap: 6px;
 }
 .hud-side {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: calc(50% - min(26vw, 104px));
   display: flex;
   align-items: center;
   gap: clamp(3px, 1.2vw, 10px);
+  min-width: 0;
   overflow: hidden;
-}
-[data-mode="2v2"] .hud-side {
-  max-width: calc(50% - min(32vw, 128px));
 }
 .hud-left {
   justify-content: flex-start;
@@ -1146,10 +1140,8 @@ body {
   justify-content: flex-end;
 }
 .hud-center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  grid-column: 2;
+  justify-self: center;
   z-index: 2;
   display: flex;
   align-items: baseline;
@@ -1167,29 +1159,25 @@ body {
   border: 1px solid var(--border);
   color: var(--muted);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hud-side .hud-pill {
-  max-width: min(38vw, 200px);
 }
 .hud-pill-room {
   flex: 0 1 auto;
   min-width: 0;
   max-width: min(28vw, 120px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .hud-pill-nick {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .hud-pill-mode {
   flex: 0 0 auto;
-  max-width: none;
 }
 .hud-pill-target {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: min(30vw, 130px);
+  flex: 0 0 auto;
 }
 .hud-score-num {
   font-family: "Crimson Pro", serif;
@@ -2165,6 +2153,11 @@ body {
   #statusMsg {
     display: none !important;
   }
+  /* Xat: més amunt per no tapar la mà (cartes més altes que a escriptori) */
+  #chatPanel {
+    bottom: calc(196px + env(safe-area-inset-bottom, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+  }
   #table {
     /* Panell més baix sense #statusMsg; 84px cobreix fila d’oferta + botons + safe típic */
     padding: 14px 16px calc(84px + env(safe-area-inset-bottom, 0px)) !important;
@@ -2458,13 +2451,12 @@ body {
   border-radius: clamp(16px, 3vmin, 24px);
 }
 
-/* En 1v1 hacemos los recuadros más anchos para que luzcan más */
+/* En 1v1 els slots una mica més amples (sense padding extra: WhatsApp va dins del slot) */
 body:not([data-mode="2v2"]) .player-wait-slot {
   min-width: clamp(220px, 45vmin, 320px);
 }
 #slot-player-1 {
   position: relative;
-  padding-right: clamp(70px, 14vmin, 96px);
 }
 
 .slot-role {
@@ -2786,6 +2778,48 @@ body:not([data-mode="2v2"]) .player-wait-slot {
   pointer-events: none;
 }
 
+/* 1v1: WhatsApp dins del slot convidat (evita superposició amb VS en mòbil) */
+body:not([data-mode="2v2"]) #slot-player-1 #waitingInviteWhatsappBtn.waiting-invite-side-btn {
+  position: relative;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 6px 10px !important;
+  border-radius: 10px;
+  margin-top: auto;
+  flex-shrink: 0;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(37, 211, 102, 0.45);
+  background: rgba(37, 211, 102, 0.12);
+}
+body:not([data-mode="2v2"])
+  #slot-player-1
+  #waitingInviteWhatsappBtn.waiting-invite-side-btn:hover {
+  border-color: rgba(37, 211, 102, 0.75);
+  background: rgba(37, 211, 102, 0.22);
+}
+body:not([data-mode="2v2"]) #slot-player-1 .waiting-invite-side-text {
+  position: static;
+  transform: none;
+  right: auto;
+  top: auto;
+  width: auto;
+  max-width: none;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  line-height: 1.15;
+  font-size: clamp(10px, 2.2vmin, 12px);
+  white-space: normal;
+}
+body:not([data-mode="2v2"]) #slot-player-1 .waiting-invite-side-text span {
+  display: inline;
+}
+
 #waitingOverlay .waiting-status {
   font-size: clamp(11px, 2.5vmin, 13px);
   line-height: 1.25;
@@ -2862,14 +2896,14 @@ body:not([data-mode="2v2"]) .player-wait-slot {
   box-shadow: 0 0 8px rgba(232, 171, 42, 0.45) !important;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .waiting-faceoff {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 8px;
   }
   .waiting-vs {
     order: 2;
-    padding: 6px 0;
+    padding: 4px 0;
   }
   #slot-player-0 {
     order: 1;
@@ -2882,6 +2916,66 @@ body:not([data-mode="2v2"]) .player-wait-slot {
     transform: none;
     width: clamp(52px, 16vw, 66px);
     font-size: 9px;
+  }
+
+  /* Pre-partida: tot més baix per veure xat sense tant scroll */
+  #waitingOverlay .waiting-faceoff-card {
+    padding: clamp(8px, 2vmin, 16px) clamp(8px, 2.2vmin, 14px);
+    gap: clamp(6px, 1.5vmin, 14px);
+  }
+  #waitingOverlay .waiting-head-block .ov-title {
+    font-size: clamp(14px, 3.8vmin, 22px);
+  }
+  #waitingOverlay .waiting-mode-pts-line {
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  #waitingOverlay .waiting-faceoff {
+    margin: 2px 0 6px;
+    gap: 6px;
+  }
+  #waitingOverlay .waiting-vs {
+    font-size: clamp(17px, 6vmin, 26px);
+    padding: 2px 0;
+  }
+  #waitingOverlay .player-wait-slot {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    min-width: 0 !important;
+    width: 100%;
+    padding: 8px 10px;
+    gap: 5px;
+    border-radius: 14px;
+  }
+  body:not([data-mode="2v2"]) #waitingOverlay .player-wait-slot {
+    min-width: 0 !important;
+  }
+  #waitingOverlay .slot-game-av {
+    width: clamp(42px, 16vw, 68px);
+    height: clamp(42px, 16vw, 68px);
+  }
+  #waitingOverlay .slot-photo-frame {
+    width: clamp(40px, 10vmin, 58px);
+    height: clamp(40px, 10vmin, 58px);
+  }
+  #waitingOverlay .waiting-close-room-btn {
+    font-size: clamp(9px, 2.2vmin, 12px);
+    padding: 5px 9px;
+  }
+  #waitingOverlay .waiting-ready-btn:not(.hidden) {
+    min-height: 42px;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  #waitingOverlay #startBtn.waiting-start-btn:not(:disabled) {
+    min-height: 42px;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+  #waitingOverlay .waiting-actions {
+    margin-top: 4px;
+    gap: 6px;
   }
 }
 
@@ -5251,6 +5345,43 @@ body.btn-large #actionBtns {
 @media (max-height: 640px) {
   #waitingOverlay .lobby-chat-messages {
     max-height: min(140px, 26vh);
+  }
+}
+@media (max-width: 767px) {
+  #waitingOverlay .lobby-chat-panel {
+    min-height: 0;
+    margin-top: 6px;
+    border-radius: 10px;
+  }
+  #waitingOverlay .lobby-chat-header {
+    padding: 5px 10px;
+  }
+  #waitingOverlay .lobby-chat-title {
+    font-size: 10px;
+  }
+  #waitingOverlay .lobby-chat-messages {
+    max-height: min(92px, 19vh);
+    min-height: 28px;
+    padding: 6px 8px;
+    gap: 3px;
+  }
+  #waitingOverlay .lobby-chat-input {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  #waitingOverlay .lobby-chat-send {
+    flex-basis: 42px;
+    min-width: 42px;
+    width: 42px;
+    min-height: 40px;
+    font-size: 16px;
+  }
+  #waitingOverlay .lobby-chat-emoji-btn {
+    flex: 0 0 40px;
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 16px;
   }
 }
 
