@@ -262,13 +262,19 @@ export async function createRoomAsBot(name) {
   }
   _lastRoomCreatedAt = Date.now();
 
-  const settings = { ..._pendingRoomSettings, modoJuego: "1v1", maxJugadores: 2 };
+  const settings = {
+    ..._pendingRoomSettings,
+    modoJuego: "1v1",
+    maxJugadores: 2,
+    contraBot: true,
+  };
   // buildDefaultState genera els slots correctes per al modo de joc
   const init = buildDefaultState(
     settings.maxJugadores,
     settings.modoJuego,
     settings.puntosParaGanar,
   );
+  init.settings.contraBot = true;
   init.roomCode = code;
   init.players[K(0)] = {
     name: humanName,
