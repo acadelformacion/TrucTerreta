@@ -66,7 +66,11 @@ function _rtdbPath() {
  */
 export function normalizeNick(nick) {
   if (!nick || typeof nick !== "string") return "";
-  return nick.trim().toLowerCase().replace(/\s+/g, " ");
+  // Trim, lowercase, col·lapsa espais i elimina caràcters prohibits en claus de Firebase (., $, #, [, ], /)
+  return nick.trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.$#\[\]\/]/g, "");
 }
 
 /**

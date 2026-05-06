@@ -125,16 +125,20 @@ PANTALLA 1 · LOBBY
           <img
             id="user-profile-photo"
             class="user-profile-photo"
-            alt=""
+            alt="Editar perfil"
+            title="Editar perfil"
             width="48"
             height="48"
             decoding="async"
+            style="cursor:pointer;"
+            role="button"
+            tabindex="0"
           />
           <div class="user-profile-meta">
             <span id="user-profile-name" class="user-profile-name">—</span>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
-              <button type="button" id="btn-estadisticas" style="font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer;">📊 Estadístiques</button>
               <button type="button" id="btn-perfil" style="font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer;">👤 Perfil</button>
+              <button type="button" id="btn-estadisticas" style="font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer;">📊 Estadístiques</button>
             </div>
           </div>
         </div>
@@ -746,20 +750,32 @@ PANTALLA 2 · MESA DE JUEGO
       </div>
     </div>
 
-    <!-- Barra de confirmació de canvi de nick (s'activa en el segon pas) -->
-    <div id="profileNickConfirmBar" class="profile-nick-confirm-bar hidden">
-      <span id="profileNickConfirmText" class="profile-nick-confirm-text"></span>
-      <div class="profile-nick-confirm-btns">
-        <button type="button" id="profileNickConfirmYes" class="lbtn lbtn-primary" style="font-size:0.85rem;padding:8px 16px;">✅ Confirmar</button>
-        <button type="button" id="profileNickConfirmNo" class="create-room-btn-secondary" style="font-size:0.85rem;">❌ Cancel·lar</button>
-      </div>
-    </div>
 
     <div class="create-room-actions">
       <button type="button" class="create-room-btn-secondary" id="profileModalCancel">Cancel·lar</button>
       <button type="button" class="lbtn lbtn-primary create-room-btn-primary" id="profileModalSubmit">💾 Guardar</button>
     </div>
     <button type="button" class="create-room-modal-close-x" id="profileModalClose" aria-label="Tancar">✕</button>
+  </div>
+</div>
+
+<!-- Modal: Confirmació canvi de nick -->
+<div
+  id="nickConfirmModal"
+  class="create-room-modal hidden"
+  role="alertdialog"
+  aria-modal="true"
+  aria-labelledby="nickConfirmModalTitle"
+  aria-hidden="true"
+>
+  <div class="create-room-backdrop" id="nickConfirmModalBackdrop"></div>
+  <div class="nick-confirm-dialog">
+    <h3 id="nickConfirmModalTitle" class="nick-confirm-title">⚠️ Canvi de nom</h3>
+    <p id="profileNickConfirmText" class="nick-confirm-body"></p>
+    <div class="nick-confirm-actions">
+      <button type="button" id="profileNickConfirmYes" class="lbtn lbtn-primary">✅ Confirmar canvi</button>
+      <button type="button" id="profileNickConfirmNo" class="create-room-btn-secondary">❌ Cancel·lar</button>
+    </div>
   </div>
 </div>
 

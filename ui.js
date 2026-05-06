@@ -118,6 +118,17 @@ function applyMatchConfig() {
   bgCfgSection?.classList.toggle("hidden", botMatch);
 }
 
+export function refreshLiveProfileVisuals() {
+  applyMatchConfig();
+  if (!session.roomRef || !session.roomCode) return;
+  get(session.roomRef)
+    .then((snap) => {
+      if (!snap.exists() || session.roomCode !== snap.key) return;
+      wrappedRenderAll(snap.val());
+    })
+    .catch(() => {});
+}
+
 function setGuestAuthBusy(busy) {
   const overlay = $("guestAuthBusy");
   const btn = $("btn-invitado");
@@ -595,6 +606,10 @@ export function initApp() {
   initProfilePromoModal();
   limpiarSalasAntiguas(); // sin await, que corra en segundo plano
   $("btn-perfil")?.addEventListener("click", openProfileModal);
+  $("user-profile-photo")?.addEventListener("click", openProfileModal);
+  $("user-profile-photo")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") openProfileModal();
+  });
   $("btn-crear-publica")?.addEventListener("click", () =>
     openCreateRoomModal("public"),
   );

@@ -1,79 +1,113 @@
 // --- moderation.js — Validació de nicks via Gemini API -----------------------
-// Model: gemini-2.5-flash-lite (ràpid i econòmic per a validació simple)
-// Fallback silenciós: si l'API falla per qualsevol motiu, el nick és permès.
+// Model: gemini-2.5-flash-lite (ràpid i econòmic)
+// Mode degradat: si l'API falla, apliquem només tallafoc local.
 
 import { GEMINI_API_KEY } from "./gemini-config.js";
 
-const GEMINI_MODEL  = "gemini-2.5-flash-lite";
-const GEMINI_URL    = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+// Intentem primer 2.5-flash-lite i fem fallback a 1.5-flash.
+const MODEL_CANDIDATES = ["gemini-2.5-flash-lite", "gemini-1.5-flash"];
+const API_VERSIONS = ["v1", "v1beta"];
 const TIMEOUT_MS    = 6000;
+let _apiUnavailableWarned = false;
 
 /**
  * Comprova si un nick és adequat via l'API de Gemini.
- * Detecta insults, blasfèmies, contingut sexual/racista/violent en qualsevol
- * idioma, incloses variants amb símbols o números (p0lla, put@, etc.).
- *
- * @param {string} nick  El nick a validar (sense normalitzar)
- * @returns {Promise<{ allowed: boolean }>}
- *   · allowed = true  → nick correcte (o error d'API → fallback permissiu)
- *   · allowed = false → nick rebutjat per la IA
  */
 export async function checkNickModeration(nick) {
-  // Guard: key no configurada → fallback permissiu sense fer cap crida
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === "POSA_AQUÍ_LA_TEUA_CLAU") {
-    console.warn("moderation.js: GEMINI_API_KEY no configurada, fallback permissiu.");
-    return { allowed: true };
+  const normalizedNick = String(nick || "").trim();
+  if (!normalizedNick) return { allowed: false, reason: "empty_nick" };
+
+  // Tallafoc local mínim per a paraules explícites comunes.
+  // Evita bypass si la IA cau o no retorna JSON vàlid.
+  const localBlockedPattern = /\b(polla|puta|puto|gilipollas|mierda|cabr[oó]n)\b/i;
+  if (localBlockedPattern.test(normalizedNick)) {
+    return { allowed: false, reason: "blocked_local_pattern" };
   }
 
-  const prompt =
-    `Eres un moderador de nicknames para un juego de cartas. ` +
-    `Analiza el siguiente nickname y responde SOLO con JSON {"allowed": true} o {"allowed": false}. ` +
-    `Rechaza si contiene insultos, blasfemias, referencias a violencia o terrorismo, ` +
-    `contenido sexual o racista, en cualquier idioma, incluyendo variantes con ` +
-    `símbolos o números (p0lla, put@, etc.). Nickname: ${nick}`;
+  // Guard: key no vàlida
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === "POSA_AQUÍ_LA_TEUA_CLAU") {
+    console.warn("Moderation: GEMINI_API_KEY no configurada.");
+    return { allowed: false, reason: "missing_api_key" };
+  }
+
+  const prompt = `Analiza este nickname para un juego: "${normalizedNick}". 
+Responde ÚNICAMENTE con este JSON: {"allowed": true} o {"allowed": false}.
+Rechaza (false) si es un insulto, blasfemia, contenido sexual, racista o violento, en cualquier idioma o con sustitución de letras por números (ej: p0lla, put@, etc.).
+De lo contrario, acepta (true).`;
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    for (const model of MODEL_CANDIDATES) {
+      for (const version of API_VERSIONS) {
+        const apiUrl = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        let response;
 
-    const res = await fetch(GEMINI_URL, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      signal:  controller.signal,
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature:      0,
-          maxOutputTokens:  20,
-          responseMimeType: "application/json",
-        },
-      }),
-    });
+        try {
+          response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 20
+              }
+            })
+          });
+        } finally {
+          clearTimeout(timer);
+        }
 
-    clearTimeout(timer);
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`Moderation API Error (${version}/${model}/${response.status}):`, errText);
+          // Clau filtrada/revocada: no insistir bloquejant tot.
+          if (response.status === 401 || response.status === 403) {
+            if (!_apiUnavailableWarned) {
+              _apiUnavailableWarned = true;
+              console.warn("Moderation desactivada temporalment: API key invàlida/revocada.");
+            }
+            return { allowed: true, reason: "api_key_unavailable" };
+          }
+          continue;
+        }
 
-    if (!res.ok) {
-      console.warn(`moderation.js: HTTP ${res.status}, fallback permissiu.`);
-      return { allowed: true };
+        const data = await response.json();
+
+        if (data?.promptFeedback?.blockReason) {
+          return { allowed: false, reason: "blocked_by_safety" };
+        }
+
+        const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!textResult) continue;
+
+        // Alguns models poden envoltar JSON en markdown.
+        const cleaned = textResult
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/\s*```$/i, "")
+          .trim();
+
+        let result;
+        try {
+          result = JSON.parse(cleaned);
+        } catch (parseErr) {
+          console.warn("Moderation JSON parse error:", parseErr, textResult);
+          continue;
+        }
+
+        console.log(`Moderation Result for "${normalizedNick}" (${version}/${model}):`, result);
+        return { allowed: result?.allowed === true };
+      }
     }
 
-    const data = await res.json();
-    const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+    // Si falla tota la cadena de models/endpoints, no bloquegem nicks normals.
+    return { allowed: true, reason: "api_temporarily_unavailable" };
 
-    let parsed;
-    try {
-      parsed = JSON.parse(raw.trim());
-    } catch {
-      console.warn("moderation.js: JSON invàlid de Gemini, fallback permissiu.", raw);
-      return { allowed: true };
-    }
-
-    // allowed és false explícitament → rebutjat; qualsevol altra cosa → permès
-    return { allowed: parsed.allowed !== false };
-
-  } catch (err) {
-    // AbortError (timeout) o qualsevol error de xarxa → fallback permissiu
-    console.warn("moderation.js: error o timeout, fallback permissiu.", err?.name);
-    return { allowed: true };
+  } catch (error) {
+    console.error("Moderation catch error:", error);
+    return { allowed: true, reason: "request_failed" };
   }
 }

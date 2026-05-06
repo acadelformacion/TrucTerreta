@@ -381,7 +381,20 @@ window.pickAvatar = pickAvatar;
  */
 export function syncProfileAvatarToMemory() {
   loadAvatarChoiceIntoMemory();
+  persistAvatarChoice();
   applyAvatarSelectionVisualOnly();
+  const code = session.roomCode;
+  if (!code || session.mySeat === null) return;
+  set(
+    ref(db, `rooms/${code}/avatars/${K(session.mySeat)}`),
+    firebaseValueForChoice(myAvatarChoice),
+  ).catch(() => {});
+  get(ref(db, `rooms/${code}`))
+    .then((s) => {
+      if (s.exists() && session.roomCode === code && _renderAll)
+        _renderAll(s.val());
+    })
+    .catch(() => {});
 }
 window.syncProfileAvatarToMemory = syncProfileAvatarToMemory;
 

@@ -27,6 +27,7 @@ import {
   TABLE_BG_OPTIONS,
 } from "./profile.js";
 import { checkNickModeration } from "./moderation.js";
+import { srcFromChoice } from "./avatars.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -972,9 +973,10 @@ export function initProfileModal() {
 
   function resetFlow() {
     setMsg("");
-    $("profileNickConfirmBar")?.classList.add("hidden");
-    submitBtn.classList.remove("hidden");
-    cancelBtn.classList.remove("hidden");
+    const cm = $("nickConfirmModal");
+    if (cm) { cm.classList.add("hidden"); cm.setAttribute("aria-hidden", "true"); }
+    submitBtn.disabled = false;
+    submitBtn.textContent = "💾 Guardar";
     nickInput.disabled = false;
     _pendingNickData = null;
   }
@@ -1101,15 +1103,20 @@ export function initProfileModal() {
         return;
       }
 
-      // 3. Tot correcte — mostrar confirmació
+      // 3. Tot correcte — obrir modal de confirmació
       setMsg("");
       _pendingNickData = dataToSave;
-      $("profileNickConfirmText").innerHTML = `Estàs segur que vols canviar el teu nom a <b>'${nick}'</b>?<br><span style="font-size:0.8rem;opacity:0.8;">Recorda que no podràs tornar a canviar-lo fins d'ací a 30 dies. ✋</span>`;
+      $("profileNickConfirmText").innerHTML =
+        `Estàs segur que vols canviar el teu nom a <b>'${nick}'</b>?` +
+        `<br><span style="font-size:0.85rem;opacity:0.75;">Recorda que no podràs tornar a canviar-lo fins d'ací a 30 dies. ✋</span>`;
 
-      submitBtn.classList.add("hidden");
-      cancelBtn.classList.add("hidden");
-      $("profileNickConfirmBar").classList.remove("hidden");
-      nickInput.disabled = true;
+      submitBtn.disabled = false;
+      submitBtn.textContent = "💾 Guardar";
+
+      const cm = $("nickConfirmModal");
+      cm.classList.remove("hidden");
+      cm.setAttribute("aria-hidden", "false");
+      $("profileNickConfirmYes").focus();
 
     } catch (e) {
       setMsg("Error comprovant el nom. Torna a intentar-ho.", true);
@@ -1146,12 +1153,20 @@ export function initProfileModal() {
       }
       
       const nameEl = $("user-profile-name");
+      const photoEl = $("user-profile-photo");
       const welcomeEl = $("lobbyWelcomeLine");
       const u = auth.currentUser;
       if (u) {
         const { getDisplayNick: gdn } = await import("./profile.js");
         const newNick = gdn();
+        const currentProfile = getProfile();
+        const currentAvatarSrc = srcFromChoice(currentProfile.avatarId);
         if (nameEl) nameEl.textContent = newNick;
+        if (photoEl && currentAvatarSrc) {
+          photoEl.src = currentAvatarSrc;
+          photoEl.alt = newNick || "Jugador";
+          photoEl.classList.remove("is-placeholder");
+        }
         const nameInputEl = $("nameInput");
         if (nameInputEl) nameInputEl.value = newNick;
         if (welcomeEl) {
@@ -1165,6 +1180,11 @@ export function initProfileModal() {
           }
         }
       }
+      const { refreshLiveProfileVisuals } = await import("./ui.js");
+      refreshLiveProfileVisuals();
+      // Tancar el modal de confirmació i el de perfil
+      const cm = $("nickConfirmModal");
+      if (cm) { cm.classList.add("hidden"); cm.setAttribute("aria-hidden", "true"); }
       hide();
     } catch (e) {
       if (e.message === "nick_taken") {
