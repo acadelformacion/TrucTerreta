@@ -1,5 +1,5 @@
 // --- animations.js — GSAP, confetti i temporitzadors de torn ----------------
-import { sndTick, sndPoint } from "./audio.js";
+import { sndTick, sndPoint, sndOpeningDeal } from "./audio.js";
 import { timeoutTurn } from "./acciones.js";
 import { isVibrationEnabled } from "./config.js";
 import { getServerTime } from "./firebase.js";
@@ -147,15 +147,17 @@ export async function animateHUDPoints(id, targetValue, hudIdx) {
     await new Promise((r) => setTimeout(r, stepMs));
     el.textContent = current;
     if (current === targetValue && g) {
+      const pulseScale = Math.min(2.45, 1.38 + diff * 0.12);
       g.fromTo(
         el,
-        { scale: 1 },
+        { scale: 1, transformOrigin: "50% 52%" },
         {
-          scale: 1.7,
-          duration: 0.12,
+          scale: pulseScale,
+          duration: 0.2,
           ease: "power2.out",
           yoyo: true,
           repeat: 1,
+          transformOrigin: "50% 52%",
           onComplete: () => {
             el.style.transform = "";
           },
@@ -165,8 +167,8 @@ export async function animateHUDPoints(id, targetValue, hudIdx) {
         el,
         { textShadow: "0 0 0px #e8ab2a" },
         {
-          textShadow: "0 0 24px #e8ab2a",
-          duration: 0.12,
+          textShadow: "0 0 28px #e8ab2a",
+          duration: 0.2,
           yoyo: true,
           repeat: 1,
         },
@@ -298,14 +300,14 @@ export function animateRivalActionTableMsg(text) {
     bubble.classList.add("msg-rival");
     bubble.style.left = "50%";
     bubble.style.top = "28%";
-    bubble.style.animation = "bubblePop 1.8s ease-out forwards";
+    bubble.style.animation = "bubblePop 2.8s ease-out forwards";
     return new Promise((resolve) => {
       const done = () => {
         bubble.remove();
         resolve();
       };
       bubble.addEventListener("animationend", done, { once: true });
-      setTimeout(done, 2000);
+      setTimeout(done, 3000);
     });
   }
 
@@ -341,12 +343,12 @@ export function animateRivalActionTableMsg(text) {
     tl.to(
       bubble,
       { opacity: 0, scale: 1.06, duration: 0.32, ease: "power2.in" },
-      0.62,
+      1.62,
     );
   });
 }
 
-export function playCenterTableMessage(text, durationMs = 1400) {
+export function playCenterTableMessage(text, durationMs = 2400) {
   const msg = document.createElement("div");
   msg.className = "table-msg-bubble msg-center start-hand-msg";
   msg.textContent = String(text || "").toUpperCase();
@@ -599,17 +601,29 @@ function resolveDeckCenterPx() {
  *   flipAllSubtimeline?: (wraps: Element[]) => unknown;
  *   onDealAborted?: (wraps: Element[]) => void;
  *   onDealAnimationComplete?: () => void;
+ *   dealSequenceIndex?: number;
+ *   dealLayout?: "myHand" | "rivalAbanico" | "rivalSide";
  * }} [options]
  */
 export function animateMyHandDealFromDeck(wraps, options = {}) {
-  const { flipSubtimeline, flipAllSubtimeline, onDealAborted, onDealAnimationComplete } =
-    options;
+  const {
+    flipSubtimeline,
+    flipAllSubtimeline,
+    onDealAborted,
+    onDealAnimationComplete,
+    dealSequenceIndex,
+    dealLayout = "myHand",
+  } = options;
   const g = globalThis.gsap;
   if (!g || !wraps?.length) {
     revealDealWrapsIfAborted(wraps);
     onDealAborted?.(Array.from(wraps));
     onDealAnimationComplete?.();
     return;
+  }
+
+  if (typeof dealSequenceIndex === "number") {
+    sndOpeningDeal(dealSequenceIndex);
   }
 
   const { gcx, gcy } = resolveDeckCenterPx();
@@ -633,40 +647,60 @@ export function animateMyHandDealFromDeck(wraps, options = {}) {
     y: stackCenter.y - fanCenters[i].y,
   }));
 
+  /** Mateix que `.rival-card-slot { transform-origin: bottom center }` — si GSAP usa centre de la carta, el mateix translate/rotate no coincide amb el repòs després del render. */
+  const rivalSlotTransformOrigin = "50% 100%";
+  const isRivalDeal = dealLayout !== "myHand";
+
   list.forEach((el, i) => {
     const r = rectsPre[i];
     g.set(el, {
       x: gcx - (r.left + r.width / 2),
       y: gcy - (r.top + r.height / 2),
       rotation: Math.random() * 14 - 7,
-      transformOrigin: "50% 50%",
+      transformOrigin: isRivalDeal ? rivalSlotTransformOrigin : "50% 50%",
       autoAlpha: 1,
       zIndex: 8 + i,
     });
   });
 
+  const finishDealCleanup = () => {
+    list.forEach((el) => {
+      el.style.transition = "none";
+      el.style.removeProperty("opacity");
+      el.style.removeProperty("z-index");
+    });
+  };
+
   const tl = g.timeline({
     onComplete: () => {
-      list.forEach((el) => {
-        el.style.transition = "none";
-        el.style.removeProperty("opacity");
-        el.style.removeProperty("z-index");
-      });
-      g.set(list, { clearProps: "transform,transformOrigin,opacity,visibility" });
-      requestAnimationFrame(() => {
+      if (dealLayout === "myHand") {
+        finishDealCleanup();
+        g.set(list, { clearProps: "transform,transformOrigin,opacity,visibility" });
         requestAnimationFrame(() => {
-          list.forEach((el) => el.style.removeProperty("transition"));
-          onDealAnimationComplete?.();
+          requestAnimationFrame(() => {
+            list.forEach((el) => el.style.removeProperty("transition"));
+            onDealAnimationComplete?.();
+          });
         });
-      });
+        return;
+      }
+      // Rival: el repartiment acaba ja en el mateix abanic / escala que `renderPlayerZone`;
+      // render nou primer per evitar un fotograma sense transform després de clearProps.
+      finishDealCleanup();
+      onDealAnimationComplete?.();
+      g.set(list, { clearProps: "transform,transformOrigin,opacity,visibility" });
+      list.forEach((el) => el.style.removeProperty("transition"));
     },
   });
 
+  // rivalSide: la fase "montó" al centre xoca amb la pila vertical del CSS; volar carta a carta al slot natural.
   const useStackAndFlipAll =
-    list.length === 3 && typeof flipAllSubtimeline === "function";
+    list.length === 3 &&
+    typeof flipAllSubtimeline === "function" &&
+    dealLayout !== "rivalSide";
 
   if (useStackAndFlipAll) {
-    const stagger = 0.28;
+    const stagger = 0.32;
     list.forEach((el, i) => {
       const sx = stackXY[i].x;
       const sy = stackXY[i].y;
@@ -676,55 +710,108 @@ export function animateMyHandDealFromDeck(wraps, options = {}) {
         x: sx * 0.4,
         y: sy * 0.4,
         rotation: spin,
-        duration: 0.11,
+        duration: 0.125,
         ease: "power1.out",
       });
       one.to(el, {
         x: sx * 0.78,
         y: sy * 0.78,
         rotation: -spin * 0.4,
-        duration: 0.1,
+        duration: 0.115,
         ease: "sine.inOut",
       });
       one.to(el, {
         x: sx,
         y: sy,
         rotation: 0,
-        duration: 0.1,
+        duration: 0.115,
         ease: "power2.out",
       });
       tl.add(one, i * stagger);
     });
-    const getFinalRot = (i, total) => total === 3 ? (i === 0 ? -8 : i === 1 ? 0 : 8) : (total === 2 ? (i === 0 ? -5 : 5) : 0);
-    const getFinalY = (i, total) => total === 3 ? (i === 0 ? 6 : i === 1 ? 0 : 6) : (total === 2 ? 4 : 0);
+    const getMyHandFinalRot = (i, total) =>
+      total === 3 ? (i === 0 ? -8 : i === 1 ? 0 : 8) : total === 2 ? (i === 0 ? -5 : 5) : 0;
+    const getMyHandFinalY = (i, total) =>
+      total === 3 ? (i === 0 ? 6 : i === 1 ? 0 : 6) : total === 2 ? (i === 0 ? 4 : 4) : 0;
+    /** Mateix valors que `renderPlayerZone` (abanico horitzontal, no la pròpia mà). */
+    const getRivalAbanicoX = (i, total) =>
+      total === 3 ? [-44, 0, 44][i] ?? 0 : total === 2 ? [-24, 24][i] ?? 0 : 0;
 
     // Primero colocamos todas las cartas en su abanico final para que el giro
     // no muestre un orden temporal que cambie milisegundos después.
-    tl.to(
-      list,
-      {
-        x: 0,
-        y: (i) => getFinalY(i, list.length),
-        rotation: (i) => getFinalRot(i, list.length),
-        duration: 0.18,
-        ease: "power2.out",
-        stagger: 0.04,
-      },
-      ">",
-    );
+    const fanDuration = dealLayout === "myHand" ? 0.21 : 0.28;
+    const fanEase = dealLayout === "myHand" ? "power2.out" : "power2.inOut";
+    if (dealLayout === "rivalAbanico") {
+      tl.to(
+        list,
+        {
+          x: (i) => getRivalAbanicoX(i, list.length),
+          y: 0,
+          rotation: (i) => getMyHandFinalRot(i, list.length),
+          duration: fanDuration,
+          ease: fanEase,
+          stagger: 0.05,
+        },
+        ">",
+      );
+    } else if (dealLayout === "rivalSide") {
+      tl.to(
+        list,
+        {
+          x: 0,
+          y: 0,
+          rotation: 0,
+          duration: fanDuration,
+          ease: fanEase,
+          stagger: 0.05,
+        },
+        ">",
+      );
+    } else {
+      tl.to(
+        list,
+        {
+          x: 0,
+          y: (i) => getMyHandFinalY(i, list.length),
+          rotation: (i) => getMyHandFinalRot(i, list.length),
+          duration: fanDuration,
+          ease: fanEase,
+          stagger: 0.05,
+        },
+        ">",
+      );
+    }
     const flipAll = flipAllSubtimeline(list);
     if (flipAll) {
       tl.add(flipAll, ">");
     }
   } else {
-    const getFinalRot = (i, total) => total === 3 ? (i === 0 ? -8 : i === 1 ? 0 : 8) : (total === 2 ? (i === 0 ? -5 : 5) : 0);
-    const getFinalY = (i, total) => total === 3 ? (i === 0 ? 6 : i === 1 ? 0 : 6) : (total === 2 ? 4 : 0);
-    const dur = 0.38;
+    const getMyHandFinalRot = (i, total) =>
+      total === 3 ? (i === 0 ? -8 : i === 1 ? 0 : 8) : total === 2 ? (i === 0 ? -5 : 5) : 0;
+    const getMyHandFinalY = (i, total) =>
+      total === 3 ? (i === 0 ? 6 : i === 1 ? 0 : 6) : total === 2 ? (i === 0 ? 4 : 4) : 0;
+    const getRivalAbanicoX = (i, total) =>
+      total === 3 ? [-44, 0, 44][i] ?? 0 : total === 2 ? [-24, 24][i] ?? 0 : 0;
+    const dur = 0.44;
     const ease = "power2.out";
     list.forEach((el, i) => {
+      const fin =
+        dealLayout === "rivalAbanico"
+          ? {
+              x: getRivalAbanicoX(i, list.length),
+              y: 0,
+              rotation: getMyHandFinalRot(i, list.length),
+            }
+          : dealLayout === "rivalSide"
+            ? { x: 0, y: 0, rotation: 0 }
+            : {
+                x: 0,
+                y: getMyHandFinalY(i, list.length),
+                rotation: getMyHandFinalRot(i, list.length),
+              };
       tl.to(
         el,
-        { x: 0, y: getFinalY(i, list.length), rotation: getFinalRot(i, list.length), duration: dur, ease },
+        { ...fin, duration: dur, ease },
         i === 0 ? 0 : ">",
       );
       const flipSub = flipSubtimeline?.(el, i);
@@ -920,3 +1007,55 @@ export function stopConfetti() {
   }
 }
 
+export function changeTableBackground(bgName) {
+  const table = document.getElementById("table");
+  const g = globalThis.gsap;
+  if (!table) return;
+
+  const newClass = `bg-${bgName}`;
+  const existingLayers = Array.from(table.querySelectorAll('.table-bg-layer'));
+  
+  // Si la última capa ya tiene la clase que queremos, no hacemos nada
+  if (existingLayers.length > 0 && existingLayers[existingLayers.length - 1].classList.contains(newClass)) {
+    return;
+  }
+
+  // Creamos la nueva capa de fondo
+  const newLayer = document.createElement("div");
+  newLayer.className = `table-bg-layer ${newClass}`;
+  newLayer.style.opacity = "0"; // Inicialmente transparente
+  
+  // La insertamos al principio del #table (o antes del deckPile)
+  table.insertBefore(newLayer, table.firstChild);
+
+  if (g) {
+    // Animamos la nueva capa para que aparezca
+    g.to(newLayer, {
+      opacity: 1,
+      duration: 0.8,
+      ease: "power2.inOut",
+      onComplete: () => {
+        // Una vez visible, eliminamos las capas anteriores
+        existingLayers.forEach(layer => {
+          // Asegurarnos de no borrar la nueva capa en caso de clicks rápidos
+          if (layer !== newLayer) {
+            layer.remove();
+          }
+        });
+      }
+    });
+
+    // Animamos las capas antiguas para que desaparezcan
+    if (existingLayers.length > 0) {
+      g.to(existingLayers, {
+        opacity: 0,
+        duration: 0.8,
+        ease: "power2.inOut"
+      });
+    }
+  } else {
+    // Fallback sin animación
+    newLayer.style.opacity = "1";
+    existingLayers.forEach(layer => layer.remove());
+  }
+}

@@ -50,11 +50,15 @@ import {
   changeSeat,
   initStatsModal,
   initStatsPromoModal,
+  initProfileModal,
+  initProfilePromoModal,
+  openProfileModal,
 } from "./lobby.js";
 import { sndBtn } from "./audio.js";
 import {
   stopConfetti,
   animateScreenShake,
+  changeTableBackground,
 } from "./animations.js";
 import {
   initChat,
@@ -95,7 +99,7 @@ import {
   getLastState,
   clearOptimisticCard,
 } from "./renderGame.js";
-import { isBotActive } from "./bot.js";
+import { isBotActive, isBotMatchState, setBotActive, initBot } from "./bot.js";
 import { warmupMatchAssets, preloadAllTableBackgrounds } from "./assetPreloader.js";
 import { isSpritesheetReady, spritesheetReady } from "./spritesheet.js";
 let _actionInProgress = false;
@@ -103,18 +107,14 @@ const $ = (id) => document.getElementById(id);
 
 function applyMatchConfig() {
   applyConfig();
-  const table = $("table");
   const bgCfgSection = $("cfgTableBackgroundSection");
   const botMatch = isBotActive();
-  if (table) {
-    table.classList.remove("bg-bot");
-    if (botMatch) {
-      table.classList.forEach((cls) => {
-        if (cls.startsWith("bg-")) table.classList.remove(cls);
-      });
-      table.classList.add("bg-bot");
-    }
-  }
+  
+  const cfg = loadConfig();
+  const bgName = botMatch ? "bot" : (cfg.tableBackground || "verde");
+  
+  changeTableBackground(bgName);
+
   bgCfgSection?.classList.toggle("hidden", botMatch);
 }
 
@@ -309,6 +309,22 @@ export function startSession(code) {
     ).catch(() => {});
   }
 
+  const ensureBotSecretSubscription = () => {
+    if (session.mySeat === null || !isBotActive()) return;
+    if (unsubBotSecretHand) return;
+    unsubBotSecretHand = onValue(ref(db, `secret_hands/${code}/hands/_1`), (snap) => {
+      _botSecretHand = snap.val() || null;
+      session.botSecretHandForMutate = _botSecretHand;
+      if (session.roomRef) {
+        get(session.roomRef).then((s) => {
+          if (s.exists() && session.roomCode === code) {
+            wrappedRenderAll(s.val());
+          }
+        }).catch(() => {});
+      }
+    });
+  };
+
   unsubGame = onValue(session.roomRef, (snap) => {
     const data = snap.val();
     if (!data) {
@@ -327,6 +343,23 @@ export function startSession(code) {
       setLobbyMsg("La sala s'ha tancat.", "err");
       return;
     }
+
+    if (data.state) {
+      const isBot = isBotMatchState(data.state);
+      if (isBot && !isBotActive()) {
+        setBotActive(true);
+        initBot().catch(() => {});
+      } else if (!isBot && isBotActive()) {
+        setBotActive(false);
+        if (unsubBotSecretHand) {
+          unsubBotSecretHand();
+          unsubBotSecretHand = null;
+        }
+        _botSecretHand = null;
+        session.botSecretHandForMutate = null;
+      }
+    }
+    ensureBotSecretSubscription();
 
     if (!data.state) {
       $("screenLobby").classList.remove("hidden");
@@ -353,19 +386,7 @@ export function startSession(code) {
       }
     });
 
-    if (isBotActive()) {
-      unsubBotSecretHand = onValue(ref(db, `secret_hands/${code}/hands/_1`), (snap) => {
-        _botSecretHand = snap.val() || null;
-        session.botSecretHandForMutate = _botSecretHand;
-        if (session.roomRef) {
-          get(session.roomRef).then((s) => {
-            if (s.exists() && session.roomCode === code) {
-              wrappedRenderAll(s.val());
-            }
-          }).catch(() => {});
-        }
-      });
-    }
+    ensureBotSecretSubscription();
   }
 
   // Refuerç: quan l'estat passa a "playing", alguns clients no rebien el snap de la sala a temps;
@@ -570,7 +591,10 @@ export function initApp() {
   initLeaveConfirmModal();
   initStatsModal();
   initStatsPromoModal();
+  initProfileModal();
+  initProfilePromoModal();
   limpiarSalasAntiguas(); // sin await, que corra en segundo plano
+  $("btn-perfil")?.addEventListener("click", openProfileModal);
   $("btn-crear-publica")?.addEventListener("click", () =>
     openCreateRoomModal("public"),
   );

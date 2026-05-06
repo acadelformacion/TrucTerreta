@@ -15,6 +15,11 @@ import {
 } from "./ui.js";
 import { loadSpritesheet } from "./spritesheet.js";
 import { preloadAllAvatars } from "./assetPreloader.js";
+import {
+  loadProfile,
+  getDisplayNick,
+  applyProfileToConfig,
+} from "./profile.js";
 
 const WINS_LS_PREFIX = "truc_wins_";
 /** Sufix numèric estable per sessió (001–999) per a usuaris anònims de Firebase. */
@@ -36,7 +41,8 @@ function lobbyDisplayName(user) {
     }
     return `Convidat-${suf}`;
   }
-  return (
+  // Per a usuaris Google: usa el nick del perfil si n'hi ha
+  return getDisplayNick() || (
     user.displayName ||
     user.email?.split("@")[0] ||
     "Jugador"
@@ -157,6 +163,15 @@ async function applySignedInUi(user) {
   }
 
   if (user?.uid) console.log("Auth UID:", user.uid);
+
+  // Carregar perfil de Firebase ABANS de tot (nick, avatar, fons, cartes)
+  // Té timeout de 3 s per no bloquejar en cas de problemes de xarxa.
+  try {
+    await loadProfile();
+    applyProfileToConfig();
+  } catch (e) {
+    console.error("loadProfile:", e);
+  }
 
   try {
     updateLobbyProfileHeader(user);

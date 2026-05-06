@@ -17,6 +17,16 @@ import { GUEST_LOBBY_AVATAR, BOT_AVATAR, firebaseValueForChoice } from "./avatar
 import { auth, firestore } from "./firebase.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { initBot, setBotActive, resetBotMemory } from "./bot.js";
+import {
+  getDisplayNick,
+  getProfile,
+  saveProfile,
+  getNickCooldownStatus,
+  checkNickAvailability,
+  CARD_DECK_OPTIONS,
+  TABLE_BG_OPTIONS,
+} from "./profile.js";
+import { checkNickModeration } from "./moderation.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -167,7 +177,9 @@ export async function createRoom() {
     }
   }
   const vis = _pendingCreateVisibility === "private" ? "private" : "public";
-  const name = normName($("nameInput")?.value);
+  // Usa el nick del perfil si existeix; si no, el contingut de nameInput (legacy)
+  const displayNick = getDisplayNick();
+  const name = normName(displayNick || $("nameInput")?.value);
   const code =
     sanitize($("roomInput")?.value) ||
     Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -233,7 +245,9 @@ export async function createRoomAsBot(name) {
   }
   const vis = "private";
   const botName = "🤖 Bot";
-  const humanName = normName(name);
+  // Usa el nick del perfil si existeix; si no, el nom passat per paràmetre
+  const displayNick = getDisplayNick();
+  const humanName = normName(displayNick || name);
   const code =
     sanitize($("roomInput")?.value) ||
     Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -319,7 +333,9 @@ export async function createRoomAsBot(name) {
 export async function joinRoom() {
   setBotActive(false);
   resetBotMemory();
-  const name = normName($("nameInput")?.value);
+  // Usa el nick del perfil si existeix; si no, el contingut de nameInput (legacy)
+  const displayNick = getDisplayNick();
+  const name = normName(displayNick || $("nameInput")?.value);
   const code = sanitize($("roomInput")?.value);
   if (!code) {
     setLobbyMsg("Escriu un codi de sala.", "err");
@@ -885,6 +901,286 @@ export function initStatsPromoModal() {
     modal.setAttribute("aria-hidden", "false");
   };
 
+  closeBtn.addEventListener("click", hide);
+  backdrop.addEventListener("click", hide);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) hide();
+  });
+}
+
+// --- Modal de Perfil ---------------------------------------------------------
+let _openProfileModal = () => {};
+let _openProfilePromoModal = () => {};
+
+export function openProfileModal() {
+  _openProfileModal();
+}
+export function openProfilePromoModal() {
+  _openProfilePromoModal();
+}
+
+export function initProfilePromoModal() {
+  const modal    = $("profilePromoModal");
+  const backdrop = $("profilePromoModalBackdrop");
+  const closeBtn = $("profilePromoModalClose");
+  if (!modal || !backdrop || !closeBtn) return;
+
+  const hide = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+  _openProfilePromoModal = () => {
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+  };
+  closeBtn.addEventListener("click", hide);
+  backdrop.addEventListener("click", hide);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) hide();
+  });
+}
+
+export function initProfileModal() {
+  const modal    = $("profileModal");
+  const backdrop = $("profileModalBackdrop");
+  const closeBtn = $("profileModalClose");
+  const cancelBtn = $("profileModalCancel");
+  const submitBtn = $("profileModalSubmit");
+  const nickInput = $("profileNickInput");
+  if (!modal || !backdrop || !closeBtn || !cancelBtn || !submitBtn || !nickInput) return;
+
+  const hide = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+
+  // Funcions auxiliars per als selectors visuals del modal
+  function _markActive(selector, activeVal) {
+    modal.querySelectorAll(selector).forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.val === activeVal);
+    });
+  }
+
+  let _pendingNickData = null;
+
+  function setMsg(html, isErr = false) {
+    const el = $("profileNickMsg");
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.color = isErr ? "#f0a0a0" : "#a0f0a0";
+  }
+
+  function resetFlow() {
+    setMsg("");
+    $("profileNickConfirmBar")?.classList.add("hidden");
+    submitBtn.classList.remove("hidden");
+    cancelBtn.classList.remove("hidden");
+    nickInput.disabled = false;
+    _pendingNickData = null;
+  }
+
+  _openProfileModal = () => {
+    const u = auth.currentUser;
+    if (!u || u.isAnonymous) {
+      _openProfilePromoModal();
+      return;
+    }
+    resetFlow();
+    
+    const prof = getProfile();
+    nickInput.value = prof.nick || "";
+    
+    // Status cooldown
+    const cd = getNickCooldownStatus();
+    if (!cd.canChange) {
+      setMsg(`⏳ Tensi cooldown actiu per canviar el nom. Et falten <b>${cd.daysLeft}</b> dies.`, true);
+      nickInput.disabled = true;
+    }
+
+    const googleOpt = modal.querySelector(".prof-av-opt-google");
+    const googleImg = modal.querySelector(".prof-av-opt-google-img");
+    if (googleOpt) {
+      const hasPhoto = !!(u && !u.isAnonymous && u.photoURL);
+      googleOpt.classList.toggle("hidden", !hasPhoto);
+      if (hasPhoto && googleImg) {
+        googleImg.src = u.photoURL;
+        googleImg.alt = "Foto Google";
+      }
+    }
+    
+    modal.querySelectorAll(".prof-av-opt").forEach((el) => {
+      const d = el.dataset.av;
+      if (d === "google") {
+        el.classList.toggle("av-selected", prof.avatarId === "g");
+      } else {
+        const i = Number(d);
+        el.classList.toggle("av-selected", prof.avatarId === i);
+      }
+    });
+    
+    _markActive(".prof-bg-opt", prof.tableBackground);
+    _markActive(".prof-deck-opt", prof.cardDeck);
+
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    if (cd.canChange) nickInput.focus();
+  };
+
+  // ... (esdeveniments d'avatar, fons, cartes es mantenen igual)
+  modal.querySelectorAll(".prof-av-opt").forEach((el) => {
+    el.addEventListener("click", () => {
+      modal.querySelectorAll(".prof-av-opt").forEach((e) => e.classList.remove("av-selected"));
+      el.classList.add("av-selected");
+    });
+  });
+
+  modal.querySelectorAll(".prof-bg-opt").forEach((btn) => {
+    btn.addEventListener("click", () => _markActive(".prof-bg-opt", btn.dataset.val));
+  });
+
+  modal.querySelectorAll(".prof-deck-opt").forEach((btn) => {
+    btn.addEventListener("click", () => _markActive(".prof-deck-opt", btn.dataset.val));
+  });
+
+  // Pas 1: Validació
+  submitBtn.addEventListener("click", async () => {
+    const rawNick = nickInput.value.trim();
+    const nick = rawNick.slice(0, 18) || null;
+    const prof = getProfile();
+    const curNick = prof.nick || "";
+    const isNickChanging = nick !== null && nick.toLowerCase() !== curNick.toLowerCase();
+
+    // Recopilar la resta de dades
+    let avatarId = "g";
+    const selectedAv = modal.querySelector(".prof-av-opt.av-selected");
+    if (selectedAv) {
+      const d = selectedAv.dataset.av;
+      avatarId = d === "google" ? "g" : Number(d);
+    }
+    const selectedBg = modal.querySelector(".prof-bg-opt.active");
+    const tableBackground = selectedBg?.dataset.val || prof.tableBackground;
+    const selectedDeck = modal.querySelector(".prof-deck-opt.active");
+    const cardDeck = selectedDeck?.dataset.val || prof.cardDeck;
+
+    const dataToSave = { nick, avatarId, tableBackground, cardDeck };
+
+    if (!isNickChanging) {
+      // Guarda directe sense confirmació de nick
+      await _executeSave(dataToSave);
+      return;
+    }
+
+    // El nick canvia
+    const cd = getNickCooldownStatus();
+    if (!cd.canChange) {
+      setMsg(`⏳ Ja has usat el teu canvi de nom. No podràs tornar a canviar-lo durant ${cd.daysLeft} dies.`, true);
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Comprovant…";
+    setMsg("Comprovant disponibilitat...");
+
+    try {
+      // 1. Unicitat (RTDB)
+      const avail = await checkNickAvailability(nick);
+      if (!avail.available) {
+        setMsg("😅 Este nom ja l'està usant algú, prova'n un altre! 🤔", true);
+        submitBtn.disabled = false;
+        submitBtn.textContent = "💾 Guardar";
+        return;
+      }
+
+      // 2. Moderació de contingut (Gemini) — fallback silenciós si l'API falla
+      setMsg("Analitzant el nom...");
+      const modResult = await checkNickModeration(nick);
+      if (!modResult.allowed) {
+        setMsg("Aquest malnom no està permès. Prova'n un altre! 🚫", true);
+        submitBtn.disabled = false;
+        submitBtn.textContent = "💾 Guardar";
+        return;
+      }
+
+      // 3. Tot correcte — mostrar confirmació
+      setMsg("");
+      _pendingNickData = dataToSave;
+      $("profileNickConfirmText").innerHTML = `Estàs segur que vols canviar el teu nom a <b>'${nick}'</b>?<br><span style="font-size:0.8rem;opacity:0.8;">Recorda que no podràs tornar a canviar-lo fins d'ací a 30 dies. ✋</span>`;
+
+      submitBtn.classList.add("hidden");
+      cancelBtn.classList.add("hidden");
+      $("profileNickConfirmBar").classList.remove("hidden");
+      nickInput.disabled = true;
+
+    } catch (e) {
+      setMsg("Error comprovant el nom. Torna a intentar-ho.", true);
+      submitBtn.disabled = false;
+      submitBtn.textContent = "💾 Guardar";
+    }
+  });
+
+  // Pas 2: Confirmació (SÍ)
+  $("profileNickConfirmYes")?.addEventListener("click", async () => {
+    if (!_pendingNickData) return;
+    const btn = $("profileNickConfirmYes");
+    btn.disabled = true;
+    btn.textContent = "Guardant…";
+    try {
+      await _executeSave(_pendingNickData);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "✅ Confirmar";
+    }
+  });
+
+  // Pas 2: Confirmació (NO)
+  $("profileNickConfirmNo")?.addEventListener("click", () => {
+    resetFlow();
+  });
+
+  // Execució real de guardat
+  async function _executeSave(data) {
+    try {
+      await saveProfile(data);
+      if (typeof window.syncProfileAvatarToMemory === "function") {
+        window.syncProfileAvatarToMemory();
+      }
+      
+      const nameEl = $("user-profile-name");
+      const welcomeEl = $("lobbyWelcomeLine");
+      const u = auth.currentUser;
+      if (u) {
+        const { getDisplayNick: gdn } = await import("./profile.js");
+        const newNick = gdn();
+        if (nameEl) nameEl.textContent = newNick;
+        const nameInputEl = $("nameInput");
+        if (nameInputEl) nameInputEl.value = newNick;
+        if (welcomeEl) {
+          welcomeEl.classList.remove("lobby-welcome-glow-play");
+          welcomeEl.textContent = newNick
+            ? `Benvingut al Truc de la Terreta, ${newNick}!`
+            : "";
+          if (newNick) {
+            void welcomeEl.offsetWidth;
+            welcomeEl.classList.add("lobby-welcome-glow-play");
+          }
+        }
+      }
+      hide();
+    } catch (e) {
+      if (e.message === "nick_taken") {
+        setMsg("😅 Este nom ja l'està usant algú, prova'n un altre! 🤔", true);
+        resetFlow();
+      } else if (e.message === "nick_cooldown") {
+        setMsg(`⏳ No pots canviar de nom encara. Et falten ${e.daysLeft} dies.`, true);
+        resetFlow();
+      } else {
+        setMsg("S'ha produït un error inesperat.", true);
+        resetFlow();
+      }
+    }
+  }
+
+  cancelBtn.addEventListener("click", hide);
   closeBtn.addEventListener("click", hide);
   backdrop.addEventListener("click", hide);
   document.addEventListener("keydown", (e) => {

@@ -378,20 +378,20 @@ function retruqueProb(myCards, trucLevel, humanScore) {
 
   let base;
   if (trucLevel <= 2) {
-    // Responder truc con retruc
-    if (mp >= 11) base = 45;
-    else          base = 10;
+    // Responder truc con retruc — más valentía con cartas top
+    if (mp >= 11) base = 65; // subido de 45 → 65
+    else          base = 20; // subido de 10 → 20
   } else {
     // Responder retruc con val4
-    if (mp >= 11) base = 35;
-    else          base = 5;
+    if (mp >= 11) base = 50; // subido de 35 → 50
+    else          base = 8;
   }
   base += _mod.venganzaBonus;
   base += _mod.tiltBonus * 0.5;
   return Math.min(100, base);
 }
 
-function acceptTrucProb(myCards, trucLevel, humanScore) {
+function acceptTrucProb(myCards, trucLevel, humanScore, botWasAggressor) {
   if (humanScore >= 11) return 100;
   const mp = maxPower(myCards);
   const hasBest = myCards.includes('1_espadas') || myCards.includes('1_bastos');
@@ -399,9 +399,12 @@ function acceptTrucProb(myCards, trucLevel, humanScore) {
 
   let base;
   if (mp >= 11) base = 80;
-  else if (mp >= 9) base = 50;
-  else if (mp >= 6) base = 25;
+  else if (mp >= 9) base = 75; // subido de 50 → 75 (un 3 o un 2 merece querer)
+  else if (mp >= 6) base = 40; // subido de 25 → 40 (figuras y ases flojos)
   else base = 10;
+
+  // Bonus de valentía: si el bot abrió el truc no debería acobardarse al primer retruco
+  if (botWasAggressor) base += 25;
 
   base += _mod.bonusQuerer;
   base -= _mod.bonusNoVull;
@@ -517,7 +520,9 @@ function decideAction(state, myCards, qvals, legal) {
   if (mode === 'respond_truc' && po?.kind === 'truc') {
     if (humanScore >= 11) return 10; // vull siempre
     const rp = retruqueProb(myCards, trucLevel, humanScore);
-    const ap = acceptTrucProb(myCards, trucLevel, humanScore);
+    // Memoria de agresividad: si fui yo quien abrió el truc, no me acobardo al primer retruco
+    const botWasAggressor = h.truc?.caller === BOT_SEAT;
+    const ap = acceptTrucProb(myCards, trucLevel, humanScore, botWasAggressor);
     const hasBest = myCards.includes('1_espadas') || myCards.includes('1_bastos');
 
     if (trucLevel === 2 && roll(rp)) {
@@ -706,6 +711,23 @@ export async function initBot() {
 export function setBotActive(active) { _botActive = active; }
 export function isBotActive() { return _botActive; }
 
+/** Partida 1v1 contra el bot (persistente en RTDB; no depèn només de `isBotActive()` després de recàrrega). */
+export function isBotMatchState(state) {
+  if (!state?.players) return false;
+  if (state.settings?.contraBot === true) return true;
+  if (state.settings?.maxJugadores === 4 || state.settings?.modoJuego === "2v2")
+    return false;
+  const p1 = state.players[`_${1}`];
+  return !!(
+    p1?.guest &&
+    typeof p1.photoURL === "string" &&
+    p1.photoURL.includes("avatar-robot")
+  );
+}
+
+// Porcentaje de veces que el bot ignora las reglas y tira de su instinto entrenado
+const BOT_ML_INSTINCT_PCT = 10;
+
 export async function botAct(state) {
   if (!_botActive) return null;
   if (state?.hand?.turn !== BOT_SEAT) return null;
@@ -716,33 +738,44 @@ export async function botAct(state) {
   const legal = Array.from(mask).map((v,i) => v>0?i:-1).filter(i=>i>=0);
   if (!legal.length) return null;
 
-  // ── Intentar decisión heurística ──────────────────────────
+  // ── ¿Usamos instinto (ML) o seguimos las reglas? ──────────
+  // Comprobamos primero si hay una regla escrita para esta situación
   const heuristicIdx = decideAction(state, myCards, null, legal);
-  if (heuristicIdx !== null && legal.includes(heuristicIdx)) {
+  const hayReglaDefinida = heuristicIdx !== null && legal.includes(heuristicIdx);
+
+  // Solo aplicamos el 10% de azar cuando había una regla definida Y el modelo está cargado.
+  // Si no hay regla definida, el ML ya es el comportamiento por defecto (fallback normal).
+  const usarInstintoML = hayReglaDefinida && _ortSession && roll(BOT_ML_INSTINCT_PCT);
+
+  if (hayReglaDefinida && !usarInstintoML) {
+    // 90%: seguir la norma escrita
     return ALL_ACTIONS[heuristicIdx];
   }
 
-  // ── Fallback: RL ──────────────────────────────────────────
-  if (!_ortSession) {
-    if (!legal.length) return null;
-    const ri = legal[Math.floor(Math.random() * legal.length)];
-    return ALL_ACTIONS[ri];
-  }
-  try {
-    const obs = buildObservation(state, BOT_SEAT);
-    const tensor = new ort.Tensor('float32', obs, [1, OBS_SIZE]);
-    const result = await _ortSession.run({ obs: tensor });
-    const qvals = Array.from(result.q_values.data);
-    let bestIdx = legal[0];
-    let bestQ = -Infinity;
-    for (const i of legal) {
-      if (qvals[i] > bestQ) { bestQ = qvals[i]; bestIdx = i; }
+  // 10% (o cuando no hay regla): usar el modelo entrenado ────
+  if (_ortSession) {
+    try {
+      const obs = buildObservation(state, BOT_SEAT);
+      const tensor = new ort.Tensor('float32', obs, [1, OBS_SIZE]);
+      const result = await _ortSession.run({ obs: tensor });
+      const qvals = Array.from(result.q_values.data);
+      let bestIdx = legal[0];
+      let bestQ = -Infinity;
+      for (const i of legal) {
+        if (qvals[i] > bestQ) { bestQ = qvals[i]; bestIdx = i; }
+      }
+      return ALL_ACTIONS[bestIdx];
+    } catch(e) {
+      console.error('botAct RL error:', e);
+      // Si el ML falla, caemos a las reglas como red de seguridad
+      if (hayReglaDefinida) return ALL_ACTIONS[heuristicIdx];
+      const ri = legal[Math.floor(Math.random() * legal.length)];
+      return ALL_ACTIONS[ri];
     }
-    return ALL_ACTIONS[bestIdx];
-  } catch(e) {
-    console.error('botAct RL error:', e);
-    if (!legal.length) return null;
-    const ri = legal[Math.floor(Math.random() * legal.length)];
-    return ALL_ACTIONS[ri];
   }
+
+  // Sin modelo cargado: seguir las reglas si las hay, si no, acción aleatoria legal
+  if (hayReglaDefinida) return ALL_ACTIONS[heuristicIdx];
+  const ri = legal[Math.floor(Math.random() * legal.length)];
+  return ALL_ACTIONS[ri];
 }

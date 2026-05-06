@@ -2,6 +2,7 @@
 import { auth, db, session, ref, set, get } from "./firebase.js";
 import { isBotActive } from "./bot.js";
 import { getNumSeats, opponents, teammates } from "./teams.js";
+import { getProfile, saveProfile } from "./profile.js";
 
 const K = (n) => `_${n}`;
 
@@ -132,6 +133,24 @@ export function loadAvatarChoiceIntoMemory() {
     myAvatarChoice = "guest";
     return;
   }
+
+  // Usuari Google: prioritzar el perfil de Firebase (ja en memòria)
+  const prof = getProfile();
+  const profileAvatarId = prof.avatarId;
+  if (profileAvatarId !== null && profileAvatarId !== undefined) {
+    if (profileAvatarId === "g" && u.photoURL) {
+      myAvatarChoice = "g";
+      return;
+    }
+    if (typeof profileAvatarId === "number" &&
+        profileAvatarId >= 0 && profileAvatarId < AVATAR_IMAGES.length) {
+      myAvatarChoice = profileAvatarId;
+      return;
+    }
+    // Si avatarId="g" però no hi ha foto Google, caiem a localStorage
+  }
+
+  // Fallback: localStorage (comportament anterior)
   const sel = localStorage.getItem("truc_avatar_sel");
   if (sel === "g" && u.photoURL) {
     myAvatarChoice = "g";
@@ -164,10 +183,16 @@ export function persistAvatarChoice() {
   if (myAvatarChoice === "g") {
     localStorage.setItem("truc_avatar_sel", "g");
     localStorage.setItem("truc_avatar", "0");
+    // Persist també al perfil Firebase de forma asíncrona
+    saveProfile({ avatarId: "g" }).catch(() => {});
     return;
   }
   localStorage.setItem("truc_avatar_sel", String(myAvatarChoice));
   localStorage.setItem("truc_avatar", String(myAvatarChoice));
+  // Persist també al perfil Firebase de forma asíncrona
+  if (typeof myAvatarChoice === "number") {
+    saveProfile({ avatarId: myAvatarChoice }).catch(() => {});
+  }
 }
 
 export function updateAvatarOptionRowsVisibility() {
@@ -349,6 +374,16 @@ export function renderWaitingSlots(room, state) {
 
 // Exposa globalment per a onclick HTML
 window.pickAvatar = pickAvatar;
+
+/**
+ * Sincronitza myAvatarChoice des del perfil carregat.
+ * Cridat des de lobby.js després de guardar el perfil.
+ */
+export function syncProfileAvatarToMemory() {
+  loadAvatarChoiceIntoMemory();
+  applyAvatarSelectionVisualOnly();
+}
+window.syncProfileAvatarToMemory = syncProfileAvatarToMemory;
 
 export function renderAvatars(room) {
   const state = room?.state;

@@ -47,7 +47,13 @@ import {
 } from "./avatars.js";
 import { bumpStoredWinsIfWonGame } from "./auth.js";
 import { isVibrationEnabled } from "./config.js";
-import { isBotActive, botAct, resetBotMemory, updateBotMemory } from "./bot.js";
+import {
+  isBotActive,
+  isBotMatchState,
+  botAct,
+  resetBotMemory,
+  updateBotMemory,
+} from "./bot.js";
 import { getCardStyle } from "./spritesheet.js";
 
 // --- Helpers locales ----------------------------------------------------------
@@ -441,7 +447,7 @@ export function showTableMsgLocal(text, isMine = true) {
   document.body.appendChild(bubble);
   setTimeout(() => {
     if (bubble) bubble.remove();
-  }, 1800);
+  }, 2800);
 }
 
 export function showTableMsg(text, isMine = true) {
@@ -622,7 +628,7 @@ function buildScoreSummary(state) {
   html += rows.length
     ? rows.join("")
     : '<div style="color:var(--muted);font-size:12px">Cap punt especial</div>';
-  html += `</div><div class="sum-result">${p0Safe} <span class="sum-score">${pts0}</span> - <span class="sum-score">${pts1}</span> ${p1Safe}</div>`;
+  html += `</div><div class="sum-result"><div class="sum-partial-title">Resultat parcial</div><div class="sum-result-line">${p0Safe} <span class="sum-score">${pts0}</span> - <span class="sum-score">${pts1}</span> ${p1Safe}</div></div>`;
   return html;
 }
 
@@ -756,7 +762,8 @@ function renderPlayerZone(zoneEl, handObj, zoneMode = "normal") {
       s.style.opacity = "0";
       s.style.transition = "none";
     }
-    s.appendChild(dealIntro ? buildHandDealBack() : buildBack());
+    // Revers: mateixa mida en repartiment i en repòs (no card-back-hand; això és només a la mà pròpia a renderMyCards).
+    s.appendChild(buildBack());
     zoneEl.appendChild(s);
   }
 }
@@ -889,6 +896,7 @@ function tryRunOpeningDealAnimation(state) {
 
   if (seat === session.mySeat) {
     animateMyHandDealFromDeck(wraps, {
+      dealSequenceIndex: _openingFullDealSeatIdx,
       onDealAnimationComplete,
       flipAllSubtimeline(allWraps) {
         const g = globalThis.gsap;
@@ -941,8 +949,11 @@ function tryRunOpeningDealAnimation(state) {
     });
   } else {
     const g = globalThis.gsap;
+    const rivalSide = zone.classList.contains("side-cards");
     animateMyHandDealFromDeck(wraps, {
+      dealSequenceIndex: _openingFullDealSeatIdx,
       onDealAnimationComplete,
+      dealLayout: rivalSide ? "rivalSide" : "rivalAbanico",
       // Mateixa branca stack+stagger que el jugador (sense girar cares).
       flipAllSubtimeline() {
         if (!g) return null;
@@ -1585,6 +1596,7 @@ function renderActions(state) {
     const b = document.createElement("button");
     b.textContent = l;
     b.className = `abtn ${cls} action-btn`;
+    b.disabled = true;   // s'activarà als 200 ms
     b.addEventListener("click", async () => {
       if (ui.locked) return;
       ui.locked = true;
@@ -1607,16 +1619,23 @@ function renderActions(state) {
                   : cls === "btn-truc-3"
                     ? offerCallText("truc", 4)
                     : l;
-      showTableMsg(callText);
+      showTableMsgLocal(callText, true);
       try {
         await fn();
+        if (session.roomCode) {
+          set(ref(db, `rooms/${session.roomCode}/msg`), {
+            text: callText,
+            at: Date.now(),
+            sender: session.mySeat,
+          }).catch(() => {});
+        }
       } finally {
         setTimeout(() => {
           ui.locked = false;
           get(session.roomRef)
             .then((snap) => { if (snap?.val()) renderAll(snap.val()); })
             .catch(() => {});
-        }, 600);
+        }, 100);
       }
     });
     ra.appendChild(b);
@@ -1647,6 +1666,10 @@ function renderActions(state) {
 
     om.classList.remove("hidden");
     ra.classList.remove("hidden");
+    // Bloqueig de 200 ms per evitar clics accidentals just quan apareix l'oferta
+    setTimeout(() => {
+      ra.querySelectorAll(".abtn").forEach(b => { b.disabled = false; });
+    }, 200);
     const pendingKind = h.pendingOffer.kind;
     if (pendingKind === "envit" && h.mode === "respond_envit") {
       add("Vull", "btn-accept", () => respondEnvit("vull"));
@@ -1778,6 +1801,15 @@ async function executeBotAction(action, state) {
     return;
   }
   const caption = botActionFlyCaption(action, state);
+  
+  if (type === "OFFER") {
+    await startOfferAsBot(action[1]);
+  } else if (type === "RESPOND_ENVIT") {
+    await respondEnvitAsBot(action[1]);
+  } else if (type === "RESPOND_TRUC") {
+    await respondTrucAsBot(action[1]);
+  }
+
   if (caption) {
     void animateRivalActionTableMsg(caption);
     if (
@@ -1787,13 +1819,6 @@ async function executeBotAction(action, state) {
     ) {
       showBubble("rivalBubble", caption);
     }
-  }
-  if (type === "OFFER") {
-    await startOfferAsBot(action[1]);
-  } else if (type === "RESPOND_ENVIT") {
-    await respondEnvitAsBot(action[1]);
-  } else if (type === "RESPOND_TRUC") {
-    await respondTrucAsBot(action[1]);
   }
 }
 
@@ -1927,7 +1952,8 @@ function updateRivalTimer(state) {
 
 // --- HUD ---------------------------------------------------------------------
 function renderHUD(state) {
-  const hideCode = session.roomVisibility === "public";
+  const hideCode =
+    session.roomVisibility === "public" || isBotMatchState(state);
   const roomEl = $("hudRoom");
   if (roomEl) {
     if (hideCode) {
@@ -1940,9 +1966,13 @@ function renderHUD(state) {
   }
   const puntosObjetivo =
     Number(state?.settings?.puntosParaGanar) === 24 ? 24 : 12;
-  $("hudTarget").textContent = `${puntosObjetivo} pedres`;
+  const targetEl = $("hudTarget");
+  if (targetEl) {
+    targetEl.innerHTML = `${ICO_STONE}<span>${puntosObjetivo} pedres</span>`;
+  }
   $("hudNick").textContent = pName(state, session.mySeat);
-  $("hudMode").textContent = getNumSeats(state) === 4 ? "2v2" : "1v1";
+  $("hudMode").textContent =
+    getNumSeats(state) === 4 ? "👥 2v2" : "🧑 1v1";
 
   const myTeam = teamOf(session.mySeat);
   const rivTeam = myTeam === 0 ? 1 : 0;
@@ -2111,7 +2141,7 @@ function renderRematchStatus(state) {
   if (!btn || !st) return;
   const myWant = !!state.rematch?.[K(session.mySeat)];
   const rivWant = !!state.rematch?.[K(other(session.mySeat))];
-  if (isBotActive()) {
+  if (isBotMatchState(state)) {
     btn.disabled = false;
     btn.textContent = "\ud83d\udd04 Revenja";
     st.textContent = "";

@@ -18,6 +18,12 @@
         ".write": "auth != null && auth.uid === $uid"
       }
     },
+    "nicknames": {
+      "$nick": {
+        ".read": true,
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || data.child('reservedUntil').val() < now)"
+      }
+    },
     "secret_hands": {
       "$room": {
         "hands": {

@@ -51,6 +51,24 @@ export const sndCard = (index) => {
     tone(560, "triangle", 0.05, 0.09, 0.06);
   }
 };
+
+const dealAudioNames = ["repartir-cartas1", "repartir-cartas2"];
+let dealHowls = [];
+
+/** Primer i segon jugador en ordre de repartiment de la ronda (índex 0 i 1). */
+export function sndOpeningDeal(dealOrderIndex) {
+  if (!isSoundEnabled()) return;
+  if (dealOrderIndex !== 0 && dealOrderIndex !== 1) return;
+  if (typeof Howl === "undefined") return;
+  if (dealHowls.length === 0) {
+    dealHowls = dealAudioNames.map((name) =>
+      new Howl({
+        src: [`Media/Audio/${name}.ogg`, `Media/Audio/${name}.mp3`],
+      }),
+    );
+  }
+  dealHowls[dealOrderIndex]?.play();
+}
 export const sndWin = () => {
   if (!isSoundEnabled()) return;
   [523, 659, 784, 1047].forEach((f, i) => tone(f, "sine", 0.14, 0.17, i * 0.1));

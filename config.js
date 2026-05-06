@@ -37,15 +37,9 @@ export function applyConfig(cfg = loadConfig()) {
   // Tamaño de botones
   document.body.classList.toggle("btn-large", cfg.buttonSize === "large");
 
-  // Fondo de la mesa
-  const table = document.getElementById("table");
-  if (table) {
-    // Quita todas las clases de fondo anteriores
-    table.classList.forEach((cls) => {
-      if (cls.startsWith("bg-")) table.classList.remove(cls);
-    });
-    table.classList.add(`bg-${cfg.tableBackground}`);
-  }
+  // Fondo de la mesa (la transición visual se maneja en ui.js vía GSAP)
+  // Aquí ya no tocamos las clases del #table
+
 
   // Sonido: no hace nada en el DOM, isSoundEnabled() lo consulta
 }

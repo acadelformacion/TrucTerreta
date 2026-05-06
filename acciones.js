@@ -1,6 +1,6 @@
 // --- Acciones de partida (mutaciones via Firebase) ----------------------------
 import { session, mutate as mutateFirebase, get, db, ref, set, serverTimestamp, functions, httpsCallable } from "./firebase.js";
-import { isBotActive } from "./bot.js";
+import { isBotMatchState } from "./bot.js";
 import * as Logica from "./logica.js";
 import {
   teamOf,
@@ -715,7 +715,9 @@ export async function requestRematch() {
     return o;
   };
 
-  if (isBotActive()) {
+  const snap = await get(session.roomRef);
+  const cur = snap.val()?.state;
+  if (cur?.status === "game_over" && isBotMatchState(cur)) {
     await mutate((state) => {
       if (state.status !== "game_over") return false;
       const n = getNumSeats(state);
