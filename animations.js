@@ -2,7 +2,7 @@
 import { sndTick, sndPoint, sndOpeningDeal } from "./audio.js";
 import { timeoutTurn } from "./acciones.js";
 import { isVibrationEnabled } from "./config.js";
-import { getServerTime } from "./firebase.js";
+import { getServerTime, isRtdbConnected, isServerTimeSynced } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -50,6 +50,13 @@ export function stopTurnTimer() {
 
 export function startTurnTimer(isMyTurn, turnStartedAt) {
   stopTurnTimer();
+  if (!isRtdbConnected() || !isServerTimeSynced()) {
+    turnTimerArm = setTimeout(
+      () => startTurnTimer(isMyTurn, turnStartedAt),
+      280,
+    );
+    return;
+  }
   if (isMyTurn && lastTurnWasMine !== true) {
     vibrateMyTurnStart();
   }
@@ -75,15 +82,16 @@ export function startTurnTimer(isMyTurn, turnStartedAt) {
     setRing("rivalTimerArc", "rivalTimerRing", (rem / TURN_SECS) * 100);
   }
 
-  // Si ja ha passat el temps, timeout immediat si és el meu torn
+  // Si ja ha passat el temps, timeout immediat si és el meu torn (sense penalitzar offline)
   if (rem <= 0) {
-    if (isMyTurn) timeoutTurn();
+    if (isMyTurn && isRtdbConnected()) timeoutTurn();
     return;
   }
 
   turnTimerArm = setTimeout(() => {
     turnTimerArm = null;
     turnTimer = setInterval(() => {
+      if (!isRtdbConnected()) return;
       // Recalcular rem basat en el temps absolut per evitar deriva del setInterval
       const nowTick = getServerTime();
       const elapsedTick = (nowTick - start) / 1000;
@@ -105,7 +113,7 @@ export function startTurnTimer(isMyTurn, turnStartedAt) {
 
       if (rem <= 0) {
         stopTurnTimer();
-        if (isMyTurn) timeoutTurn();
+        if (isMyTurn && isRtdbConnected()) timeoutTurn();
       }
     }, 1000);
   }, 50);
@@ -899,22 +907,22 @@ function playGameOverConfettiWinner(fire) {
 function playGameOverConfettiLoser(fire) {
   const sadDrop = () => {
     fire({
-      particleCount: 3,
-      spread: 28,
-      startVelocity: 5,
-      gravity: 0.3,
-      ticks: 300,
+      particleCount: 5,
+      spread: 34,
+      startVelocity: 14,
+      gravity: 0.58,
+      ticks: 220,
       // Arranca un poco dentro del canvas para que se vea caer desde el inicio.
       origin: { x: Math.random() * 0.75 + 0.125, y: 0.08 },
       colors: ["#0a0a0a", "#252525", "#3d3d3d"],
       shapes: ["circle"],
-      scalar: 0.75,
+      scalar: 1.08,
     });
   };
   sadDrop();
-  scheduleGoConfettiTimeout(sadDrop, 140);
-  scheduleGoConfettiTimeout(sadDrop, 280);
-  _goConfettiRainInterval = setInterval(sadDrop, 250);
+  scheduleGoConfettiTimeout(sadDrop, 110);
+  scheduleGoConfettiTimeout(sadDrop, 220);
+  _goConfettiRainInterval = setInterval(sadDrop, 170);
   scheduleGoConfettiTimeout(resetGameOverConfettiOnly, 8200);
 }
 
@@ -973,6 +981,16 @@ export function playGameOverPresentation(iWon) {
           goCard,
           { filter: "grayscale(100%)", duration: 0.95, ease: "power1.inOut" },
           0.18,
+        )
+        .to(
+          goCard,
+          { filter: "grayscale(100%)", duration: 5, ease: "none" },
+          ">",
+        )
+        .to(
+          goCard,
+          { filter: "grayscale(0%)", duration: 0.8, ease: "power2.inOut" },
+          ">",
         )
         .to(
           goCard,

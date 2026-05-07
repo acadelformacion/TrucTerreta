@@ -3,6 +3,8 @@ import { isSoundEnabled } from './config.js';
 import {
   mustPlayCardOnlyThisTrick,
   canSeatEscalateAcceptedTruc,
+  handWinner,
+  cmpTrick,
 } from './logica.js';
 
 // ── CONSTANTES ────────────────────────────────────────────────
@@ -100,6 +102,65 @@ function rand(min, max) {
 
 function roll(percent) {
   return Math.random() * 100 < percent;
+}
+
+/** Mateixa condició que `resolveTrick` després d'afegir una basa resolta a `trickHistory`. */
+function handFinishedAfterHypotheticalHist(hist) {
+  const w0 = hist.filter((t) => t.winner === 0).length;
+  const w1 = hist.filter((t) => t.winner === 1).length;
+  const b1 = hist[0]?.winner;
+  const b2 = hist[1]?.winner;
+  const tIdx = hist.length;
+  return (
+    w0 >= 2 ||
+    w1 >= 2 ||
+    tIdx >= 3 ||
+    (b1 === 99 && b2 !== 99 && b2 !== undefined) ||
+    (b1 !== 99 && b1 !== undefined && b2 === 99)
+  );
+}
+
+/**
+ * El rival ja ha jugat en aquesta basa; tenim carta que el supera i,
+ * si guanyem aquesta basa, la mà acaba i guanya l'equip del bot.
+ */
+function botCertainWin(state, h, myCards) {
+  const rivalCard = getPlayed(h, 1 - BOT_SEAT);
+  if (!rivalCard) return false;
+  if (!myCards.some((c) => cmpTrick(c, rivalCard) > 0)) return false;
+
+  const hist = h.trickHistory || [];
+  const botTeam = BOT_SEAT % 2;
+  const hyp = [...hist, { winner: botTeam }];
+  if (!handFinishedAfterHypotheticalHist(hyp)) return false;
+
+  const fakeState = {
+    mano: state.mano ?? 0,
+    hand: { trickHistory: hyp },
+  };
+  return handWinner(fakeState) === botTeam;
+}
+
+/** Per evitar que el ML substituïsca el truc obligatori quan hi ha victòria segura. */
+export function isBotCertainWinTrucOffer(state) {
+  const h = state?.hand;
+  if (!h || state?.status !== 'playing' || h.status !== 'in_progress')
+    return false;
+  if (h.mode !== 'normal' || h.pendingOffer) return false;
+  const mask = buildActionMask(state, BOT_SEAT);
+  const legal = Array.from(mask)
+    .map((v, i) => (v > 0 ? i : -1))
+    .filter((i) => i >= 0);
+  if (!legal.includes(5)) return false;
+  const myCards = fromHObj(h.hands?.[K(BOT_SEAT)]);
+  return botCertainWin(state, h, myCards);
+}
+
+function cardsForTrucStrength(myCards, h) {
+  const played = getPlayed(h, BOT_SEAT);
+  const arr = [...myCards];
+  if (played) arr.push(played);
+  return arr;
 }
 
 // ── MEMORIA ADAPTATIVA ────────────────────────────────────────
@@ -519,19 +580,32 @@ function decideAction(state, myCards, qvals, legal) {
   // ── RESPOND_TRUC ──────────────────────────────────────────
   if (mode === 'respond_truc' && po?.kind === 'truc') {
     if (humanScore >= 11) return 10; // vull siempre
-    const rp = retruqueProb(myCards, trucLevel, humanScore);
+    const botPlayedThisTrick = getPlayed(h, BOT_SEAT) !== null;
+    const strengthCards = cardsForTrucStrength(myCards, h);
+    // Ja hem jugat la carta en aquesta basa i només queda el rival: mai retruc / val4
+    const rp = botPlayedThisTrick
+      ? 0
+      : retruqueProb(strengthCards, trucLevel, humanScore);
     // Memoria de agresividad: si fui yo quien abrió el truc, no me acobardo al primer retruco
     const botWasAggressor = h.truc?.caller === BOT_SEAT;
-    const ap = acceptTrucProb(myCards, trucLevel, humanScore, botWasAggressor);
-    const hasBest = myCards.includes('1_espadas') || myCards.includes('1_bastos');
+    const ap = acceptTrucProb(
+      strengthCards,
+      trucLevel,
+      humanScore,
+      botWasAggressor,
+    );
+    const hasBest =
+      strengthCards.includes('1_espadas') ||
+      strengthCards.includes('1_bastos');
+    const mpStr = maxPower(strengthCards);
 
     if (trucLevel === 2 && roll(rp)) {
-      if (hasBest || mp >= 11) _botWasBluffingTruc = false;
+      if (hasBest || mpStr >= 11) _botWasBluffingTruc = false;
       else _botWasBluffingTruc = true;
       return 12; // retruque
     }
     if (trucLevel === 3 && legal.includes(13) && roll(rp)) {
-      if (hasBest || mp >= 11) _botWasBluffingTruc = false;
+      if (hasBest || mpStr >= 11) _botWasBluffingTruc = false;
       else _botWasBluffingTruc = true;
       return 13; // val4
     }
@@ -555,6 +629,7 @@ function decideAction(state, myCards, qvals, legal) {
 
     // ¿Cantar truc?
     if (legal.includes(5)) {
+      if (botCertainWin(state, h, myCards)) return 5;
       let trucProb = 0;
       const b1 = hist[0];
       if (!b1) {
@@ -745,7 +820,12 @@ export async function botAct(state) {
 
   // Solo aplicamos el 10% de azar cuando había una regla definida Y el modelo está cargado.
   // Si no hay regla definida, el ML ya es el comportamiento por defecto (fallback normal).
-  const usarInstintoML = hayReglaDefinida && _ortSession && roll(BOT_ML_INSTINCT_PCT);
+  // Victòria segura → no deixar que el ML evite el truc obligatori.
+  const usarInstintoML =
+    hayReglaDefinida &&
+    _ortSession &&
+    roll(BOT_ML_INSTINCT_PCT) &&
+    !(heuristicIdx === 5 && isBotCertainWinTrucOffer(state));
 
   if (hayReglaDefinida && !usarInstintoML) {
     // 90%: seguir la norma escrita

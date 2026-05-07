@@ -103,6 +103,19 @@ function initGoogleSignInButton() {
         logo_alignment: "left",
       });
     }
+    const profilePromoSlot = document.getElementById("g_id_signin_profile_promo");
+    if (profilePromoSlot) {
+      profilePromoSlot.innerHTML = "";
+      gsi.renderButton(profilePromoSlot, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+        width: 300,
+        logo_alignment: "left",
+      });
+    }
     _gsiBootDone = true;
     return true;
   } catch (e) {

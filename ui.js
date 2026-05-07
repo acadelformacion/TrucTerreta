@@ -29,6 +29,7 @@ import {
   startOffer,
   requestRematch,
   guestReady,
+  clearStickyStarsRecoveryWatchdog,
 } from "./acciones.js";
 import { loadConfig, setConfig, applyConfig } from "./config.js";
 import { clearAuthErr, showAuthErr, initAuthFlow } from "./auth.js";
@@ -254,6 +255,24 @@ function resetInactivity() {
 // handleCredentialResponse, readGoogleClientId, initGoogleSignInButton,
 // scheduleGoogleSignInInit, initAuthFlow, bumpStoredWinsIfWonGame -> auth.js
 
+function initNetworkStatusBanner() {
+  const screen = $("screenGame");
+  if (!screen) return;
+  let banner = $("netStatusBanner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "netStatusBanner";
+    banner.className = "net-status-banner hidden";
+    banner.setAttribute("role", "status");
+    banner.textContent = "Sense connexió amb el servidor…";
+    screen.insertBefore(banner, screen.firstChild);
+  }
+  onValue(ref(db, ".info/connected"), (s) => {
+    const ok = s.val() === true;
+    banner.classList.toggle("hidden", ok);
+  });
+}
+
 /** Reconnexió després d’auth (cridat des de `game.js`). */
 export async function tryReconnectFromLocalStorage() {
   const _sr = localStorage.getItem(LS.room);
@@ -263,6 +282,30 @@ export async function tryReconnectFromLocalStorage() {
     const snap = await get(ref(db, `rooms/${_code}`));
     if (snap.exists() && snap.val()?.state) {
       if (session.roomCode) return;
+
+      const rawSeat = localStorage.getItem(LS.seat);
+      let seatNum = null;
+      if (rawSeat != null && rawSeat !== "") seatNum = Number(rawSeat);
+      const roomVal = snap.val();
+      const u = auth.currentUser;
+      if (
+        seatNum != null &&
+        Number.isFinite(seatNum) &&
+        u &&
+        roomVal?.state?.players
+      ) {
+        const pl = roomVal.state.players[`_${seatNum}`];
+        if (pl?.uid && pl.uid !== u.uid) {
+          localStorage.removeItem(LS.room);
+          localStorage.removeItem(LS.seat);
+          setLobbyMsg(
+            "Aquesta sessió és d'un altre usuari. Entra de nou a la sala amb el codi.",
+            "err",
+          );
+          return;
+        }
+      }
+
       session.roomCode = _code;
       if ($("roomInput")) $("roomInput").value = _code;
       const _ss = localStorage.getItem(LS.seat);
@@ -473,6 +516,7 @@ export function detachRoomListeners() {
   detachLobbyChatListeners();
   cancelPreGameRoomOnDisconnect();
   clearAbsenceTimers();
+  clearStickyStarsRecoveryWatchdog();
 }
 
 async function leaveRoom() {
@@ -588,6 +632,7 @@ const wrappedRenderAll = async (data) => {
 };
 
 export function initApp() {
+  initNetworkStatusBanner();
   configureActions({
     renderAll: wrappedRenderAll,
     renderAllLastRoom: () => { const lr = getLastRoom(); if (lr) renderAll(lr); },

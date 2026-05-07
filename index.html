@@ -695,6 +695,10 @@ PANTALLA 2 · MESA DE JUEGO
     <!-- Nick -->
     <div class="cfg-section" style="margin-bottom:0;">
       <label class="cfg-label" for="profileNickInput">✏️ Nick <span style="font-size:0.75rem;opacity:0.6;">(màx. 18 caràcters)</span></label>
+      <p id="profileNickCurrentHint" class="profile-nick-current-hint" aria-live="polite">
+        <span class="profile-nick-current-label">El teu nick visible ara:</span>
+        <span id="profileNickCurrentHintNick" class="profile-nick-current-value"></span>
+      </p>
       <input
         id="profileNickInput"
         class="private-code-input"
@@ -703,6 +707,7 @@ PANTALLA 2 · MESA DE JUEGO
         placeholder="El teu nom a les partides…"
         autocomplete="off"
         spellcheck="false"
+        aria-describedby="profileNickCurrentHint"
         style="margin-top:6px;"
       />
       <!-- Missatge d'estat del nick (errors, cooldown, confirmació) -->

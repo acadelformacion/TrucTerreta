@@ -1,5 +1,16 @@
 // --- Acciones de partida (mutaciones via Firebase) ----------------------------
-import { session, mutate as mutateFirebase, get, db, ref, set, serverTimestamp, functions, httpsCallable } from "./firebase.js";
+import {
+  session,
+  mutate as mutateFirebase,
+  get,
+  db,
+  ref,
+  set,
+  serverTimestamp,
+  functions,
+  httpsCallable,
+  handSlotNeedsSecretReveal,
+} from "./firebase.js";
 import { isBotMatchState } from "./bot.js";
 import * as Logica from "./logica.js";
 import {
@@ -208,6 +219,71 @@ function pullRoomAndRender() {
 
 export const ui = { locked: false };
 
+let _stickyStarsTimer = null;
+
+/** Cancel·la reintent programat de repartiment (`detachRoom`). */
+export function clearStickyStarsRecoveryWatchdog() {
+  if (_stickyStarsTimer) {
+    clearTimeout(_stickyStarsTimer);
+    _stickyStarsTimer = null;
+  }
+}
+
+/**
+ * Si després d’un temps les mans segueixen amb `*` (fallà la CF), l’amfitrió (seient 0) torna a cridar repartir.
+ */
+export function bumpStickyStarsRecoveryWatchdog(state) {
+  if (session.mySeat !== 0 || !session.roomRef || !session.roomCode) return;
+  if (
+    state.status !== "playing" ||
+    !state.hand ||
+    state.hand.status !== "in_progress"
+  ) {
+    clearStickyStarsRecoveryWatchdog();
+    return;
+  }
+  const hands = state.hand.hands;
+  if (!hands) return;
+  const anyStars = Object.values(hands).some((slot) =>
+    handSlotNeedsSecretReveal(slot),
+  );
+  if (!anyStars) {
+    clearStickyStarsRecoveryWatchdog();
+    return;
+  }
+
+  if (_stickyStarsTimer != null) return;
+
+  const code = session.roomCode;
+  _stickyStarsTimer = setTimeout(async () => {
+    _stickyStarsTimer = null;
+    if (!session.roomRef || session.roomCode !== code) return;
+    const snap = await get(session.roomRef).catch(() => null);
+    const st = snap?.val()?.state;
+    if (!st || st.status !== "playing" || !st.hand || st.hand.status !== "in_progress")
+      return;
+    const hands2 = st.hand.hands;
+    if (!hands2) return;
+    const stillStars = Object.values(hands2).some((slot) =>
+      handSlotNeedsSecretReveal(slot),
+    );
+    if (!stillStars) return;
+    try {
+      const repartir = httpsCallable(functions, "repartirCartas");
+      const numSeats = getNumSeats(st);
+      const handNumber = st.handNumber;
+      await repartir({
+        roomId: session.roomCode,
+        numSeats,
+        handNumber,
+      });
+    } catch (e) {
+      console.warn("Reintent repartir (* persistent):", e);
+    }
+    pullRoomAndRender();
+  }, 2800);
+}
+
 export async function dealHand() {
   let numSeats = 2;
   let handNumber = 0;
@@ -246,11 +322,17 @@ export async function dealHand() {
   });
 
   if (ok && session.roomCode) {
-    try {
-      const repartir = httpsCallable(functions, "repartirCartas");
-      await repartir({ roomId: session.roomCode, numSeats, handNumber });
-    } catch (e) {
-      console.error("Error repartiendo cartas:", e);
+    const repartir = httpsCallable(functions, "repartirCartas");
+    const payload = { roomId: session.roomCode, numSeats, handNumber };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await repartir(payload);
+        break;
+      } catch (e) {
+        console.error("Error repartiendo cartas:", e);
+        if (attempt < 2)
+          await new Promise((r) => setTimeout(r, 450 * (attempt + 1)));
+      }
     }
   }
 
@@ -775,9 +857,7 @@ export async function claimWinByRivalAbsence() {
     const n = getNumSeats(state);
     if (session.mySeat < 0 || session.mySeat >= n) return false;
 
-    const rivalSeat = _respondingSeat(state, session.mySeat);
     const me = state.players?.[K(session.mySeat)];
-    const rival = state.players?.[K(rivalSeat)];
     if (!me) return false;
 
     const setWin = (logLine) => {
@@ -789,16 +869,26 @@ export async function claimWinByRivalAbsence() {
       pushLog(state, logLine);
     };
 
-    // Rival ja no està a `players` (p. ex. ha fet «Eixir» i s'ha borrat el node)
-    if (!rival) {
+    const oppSeats =
+      n === 4
+        ? allSeats(state).filter((s) => teamOf(s) !== teamOf(session.mySeat))
+        : [session.mySeat === 0 ? 1 : 0];
+
+    const missingSeat = oppSeats.find((s) => !state.players?.[K(s)]);
+    if (missingSeat !== undefined) {
       setWin("Victòria per abandonament (rival fora de la sala).");
       return true;
     }
 
-    const rivalName = rival.name || "El rival";
-    setWin(
-      `${rivalName} no s'ha reconnectat: victòria per abandonament.`,
-    );
+    if (n === 4) {
+      setWin("Un rival no s'ha reconnectat: victòria per abandonament.");
+      return true;
+    }
+
+    const rivalSeat = oppSeats[0];
+    const rival = state.players?.[K(rivalSeat)];
+    const rivalName = rival?.name || "El rival";
+    setWin(`${rivalName} no s'ha reconnectat: victòria per abandonament.`);
     return true;
   });
 }
@@ -817,23 +907,29 @@ export async function guestReady() {
   });
 }
 
-export async function registerRivalAbsence() {
+/** Incrementa el comptador de desconnexions del jugador `seat` (presència Firebase absent). */
+export async function registerPlayerDisconnect(seat) {
   await mutate((state) => {
     if (state.status !== "playing") return false;
-    const rivalSeat = _respondingSeat(state, session.mySeat);
-    const rival = state.players?.[K(rivalSeat)];
+    const rival = state.players?.[K(seat)];
     if (!rival) return false;
-    
+
     rival.disconnects = (rival.disconnects || 0) + 1;
-    pushLog(state, `${rival.name} s'ha desconnectat (${rival.disconnects}/3).`);
-    
+    pushLog(
+      state,
+      `${rival.name} s'ha desconnectat (${rival.disconnects}/3).`,
+    );
+
     if (rival.disconnects >= 3) {
       if (state.hand?.allTricks) state.lastAllTricks = state.hand.allTricks;
       state.hand = null;
       state.status = "game_over";
       state.winner = teamOf(session.mySeat);
       state.gameEndReason = "abandonment";
-      pushLog(state, `Victòria per excés de desconnexions de ${rival.name}.`);
+      pushLog(
+        state,
+        `Victòria per excés de desconnexions de ${rival.name}.`,
+      );
     }
     return true;
   });

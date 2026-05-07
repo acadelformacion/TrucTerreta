@@ -990,6 +990,11 @@ export function initProfileModal() {
     resetFlow();
     
     const prof = getProfile();
+    const hintNickEl = $("profileNickCurrentHintNick");
+    if (hintNickEl) {
+      const dn = getDisplayNick();
+      hintNickEl.textContent = dn == null ? "—" : String(dn);
+    }
     nickInput.value = prof.nick || "";
     
     // Status cooldown

@@ -16,7 +16,8 @@ import {
   respondTrucAsBot,
   goMazo,
   claimWinByRivalAbsence,
-  registerRivalAbsence,
+  registerPlayerDisconnect,
+  bumpStickyStarsRecoveryWatchdog,
 } from "./acciones.js";
 import { sndCard, sndBtn, sndTick, sndWin, sndLose, detectSounds } from "./audio.js";
 import {
@@ -226,7 +227,8 @@ let _absenceClaimTimer = null;
 let _absenceTickTimer = null;
 let _absenceDeadline = 0;
 let _claimMissingRivalPending = false;
-let _lastRivalAbsentState = false;
+/** Seients rivals als quals ja hem registrat una desconnexió en aquest període (fins que tornen tots presents). */
+let _disconnectLoggedSeats = new Set();
 
 // Pre-game onDisconnect
 let _preGameRoomOnDisconnect = null;
@@ -552,14 +554,30 @@ function buildScoreSummary(state) {
       if (hasJ1 && !hasJ0) return p1Safe;
       return p0Safe;
     };
-    if (
+    // winnerSeat (0 o 1) guardado en el log tiene prioridad sobre heurística de nombres
+    const seatToName = (s) =>
+      s === 0 ? p0Safe : s === 1 ? p1Safe : guessWinner();
+    // "rebutjat" se comprueba ANTES de "guanya" porque el log de envit rechazado
+    // dice "Envit rebutjat: guanya Name (+1)." y también contiene "guanya"
+    if (txt.includes("Envit") && txt.includes("rebutjat")) {
+      winner = seatToName(l.winnerSeat);
+      const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
+        ? l.winnerSeat
+        : (winner === p0Safe ? 0 : 1);
+      label = `No vull l'envit - +${pts} per <b>${winner}</b>`;
+      rows.push(
+        `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
+      );
+      if (envitPtsTo === 0) pts0 += pts;
+      else pts1 += pts;
+      continue;
+    } else if (
       txt.includes("Envit") &&
       (txt.includes("guanya") || txt.includes("acceptat"))
     ) {
-      winner = guessWinner();
+      winner = seatToName(l.winnerSeat);
       const proofHtml = l.envitProof ? envitProofInnerHtml(l.envitProof) : "";
       label = `<span>Envit guanyat per <b>${winner}</b></span>${proofHtml}`;
-      // Usa el seient guardat directament; fallback a guessWinner per logs antics
       const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
         ? l.winnerSeat
         : (winner === p0Safe ? 0 : 1);
@@ -571,19 +589,6 @@ function buildScoreSummary(state) {
         else pts1 += pts;
         continue;
       }
-      // Sense prova: afegim igualment i continuem
-      rows.push(
-        `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
-      );
-      if (envitPtsTo === 0) pts0 += pts;
-      else pts1 += pts;
-      continue;
-    } else if (txt.includes("Envit") && txt.includes("rebutjat")) {
-      winner = guessWinner();
-      const envitPtsTo = (l.winnerSeat === 0 || l.winnerSeat === 1)
-        ? l.winnerSeat
-        : (winner === p0Safe ? 0 : 1);
-      label = `No vull l'envit - +${pts} per <b>${winner}</b>`;
       rows.push(
         `<div class="sum-row"><span class="sum-label">${label}</span><span class="sum-pts">+${pts}</span></div>`,
       );
@@ -2064,34 +2069,45 @@ function checkPresence(state) {
     $("absenceBar")?.classList.add("hidden");
     return;
   }
-  // In 2v2 check presence of the first opponent; in 1v1 check the single rival
-  const presenceSeat = getNumSeats(state) === 4
-    ? opponents(session.mySeat, state)[0]
-    : other(session.mySeat);
-  get(ref(db, `rooms/${session.roomCode}/presence/${K(presenceSeat)}`))
-    .then((snap) => {
+  const oppSeats =
+    getNumSeats(state) === 4
+      ? opponents(session.mySeat, state)
+      : [other(session.mySeat)];
+  Promise.all(
+    oppSeats.map((s) =>
+      get(ref(db, `rooms/${session.roomCode}/presence/${K(s)}`)),
+    ),
+  )
+    .then((snaps) => {
       if (!session.roomCode || session.mySeat === null) return;
       if (!isActiveMatchState(_lastState) || _lastState.status === "game_over") {
         clearAbsenceTimers();
         $("absenceBar")?.classList.add("hidden");
         return;
       }
-      const p = snap.val();
-      const absent = p?.absent === true;
       const bar = $("absenceBar");
       if (!bar) return;
 
-      if (!absent) {
-        _lastRivalAbsentState = false;
+      const absentSeats = [];
+      snaps.forEach((snap, i) => {
+        if (snap.val()?.absent === true) absentSeats.push(oppSeats[i]);
+      });
+      const anyAbsent = absentSeats.length > 0;
+
+      if (!anyAbsent) {
+        _disconnectLoggedSeats.clear();
         clearAbsenceTimers();
         bar.classList.add("hidden");
         return;
       }
 
-      if (!_lastRivalAbsentState) {
-        _lastRivalAbsentState = true;
-        stopTurnTimer();
-        registerRivalAbsence();
+      stopTurnTimer();
+
+      for (const s of absentSeats) {
+        if (!_disconnectLoggedSeats.has(s)) {
+          _disconnectLoggedSeats.add(s);
+          registerPlayerDisconnect(s);
+        }
       }
 
       bar.classList.remove("hidden");
@@ -2231,6 +2247,7 @@ export function renderAll(room) {
     $("tableCdEl")?.classList.add("hidden");
   }
   checkPresence(state);
+  bumpStickyStarsRecoveryWatchdog(state);
   // In 2v2, check that at least one opponent is present (not both seats missing)
   if (
     session.mySeat !== null &&

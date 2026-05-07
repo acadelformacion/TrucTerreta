@@ -51,9 +51,27 @@ export const firestore = getFirestore(app);
 
 // --- Sincronització de temps amb el servidor ----------------------------------
 let _serverTimeOffset = 0;
+/** True des del primer snapshot de `.info/serverTimeOffset` (offset pot ser 0 vàlid). */
+let _serverTimeSyncedOnce = false;
 onValue(ref(db, ".info/serverTimeOffset"), (snap) => {
   _serverTimeOffset = snap.val() || 0;
+  _serverTimeSyncedOnce = true;
 });
+
+let _rtdbConnected = true;
+onValue(ref(db, ".info/connected"), (snap) => {
+  _rtdbConnected = snap.val() === true;
+});
+
+/** Firebase RTDB connectat (websocket actiu). */
+export function isRtdbConnected() {
+  return _rtdbConnected;
+}
+
+/** Ja s’ha rebut sync de rellotge amb el servidor; evita timeouts falsos just després de reconnectar. */
+export function isServerTimeSynced() {
+  return _serverTimeSyncedOnce;
+}
 
 /** Retorna el timestamp actual sincronitzat amb el servidor de Google. */
 export function getServerTime() {
