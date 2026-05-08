@@ -5,6 +5,7 @@ import {
   canSeatEscalateAcceptedTruc,
   handWinner,
   cmpTrick,
+  getPuntosParaGanar,
 } from './logica.js';
 
 // ── CONSTANTES ────────────────────────────────────────────────
@@ -161,6 +162,60 @@ function cardsForTrucStrength(myCards, h) {
   const arr = [...myCards];
   if (played) arr.push(played);
   return arr;
+}
+
+/** Punts que rep l'equip que ha cantat el truc si el rival diu no_vull (cf. `acceptedLevel` en `applyHandEnd`). */
+function callerTeamPointsIfRejectTruc(offerLevel) {
+  const L = Number(offerLevel);
+  return Math.max(0, L - 1);
+}
+
+/** Si el bot diu no_vull, l'equip del que ha cantat arriba als punts de victòria (regalar la partida). */
+function rivalReachesVictoryIfBotRejectsTruc(state, pendingOffer) {
+  const meta = getPuntosParaGanar(state);
+  const callerTeam = pendingOffer.by % 2;
+  const callerScore = real(state.scores?.[K(callerTeam)]);
+  return callerScore + callerTeamPointsIfRejectTruc(pendingOffer.level) >= meta;
+}
+
+function callerTeamPointsIfRejectEnvit(po) {
+  if (po.level === 'falta') {
+    const ff = po.faltaFromLevel;
+    if (ff === 4) return 4;
+    if (ff === 2) return 2;
+    return 1;
+  }
+  if (po.level === 4) return 2;
+  return 1;
+}
+
+function rivalReachesVictoryIfBotRejectsEnvit(state, po) {
+  const meta = getPuntosParaGanar(state);
+  const callerTeam = po.by % 2;
+  const callerScore = real(state.scores?.[K(callerTeam)]);
+  return callerScore + callerTeamPointsIfRejectEnvit(po) >= meta;
+}
+
+/** Evita no_vull (índex 7 envit / 11 truc) quan regalaria la victòria al rival; retorna una acció legal substituta. */
+function clampBotIdxIfRejectGiftVictory(state, legal, chosenIdx) {
+  const h = state.hand;
+  const po = h?.pendingOffer;
+  if (!po || !legal.includes(chosenIdx)) return chosenIdx;
+  if (h.mode === 'respond_truc' && po.kind === 'truc' && chosenIdx === 11
+      && rivalReachesVictoryIfBotRejectsTruc(state, po)) {
+    if (po.level === 2 && legal.includes(12)) return 12;
+    if (po.level === 3 && legal.includes(13)) return 13;
+    return legal.includes(10) ? 10 : chosenIdx;
+  }
+  if (h.mode === 'respond_envit' && po.kind === 'envit' && chosenIdx === 7
+      && rivalReachesVictoryIfBotRejectsEnvit(state, po)) {
+    if (po.level === 2) {
+      if (legal.includes(9)) return 9;
+      if (legal.includes(8)) return 8;
+    } else if (po.level === 4 && legal.includes(9)) return 9;
+    return legal.includes(6) ? 6 : chosenIdx;
+  }
+  return chosenIdx;
 }
 
 // ── MEMORIA ADAPTATIVA ────────────────────────────────────────
@@ -550,6 +605,13 @@ function decideAction(state, myCards, qvals, legal) {
   // ── RESPOND_ENVIT ─────────────────────────────────────────
   if (mode === 'respond_envit' && po?.kind === 'envit') {
     if (humanScore >= 11) return 6; // vull siempre
+    if (rivalReachesVictoryIfBotRejectsEnvit(state, po)) {
+      if (po.level === 2) {
+        if (legal.includes(9)) return 9; // falta
+        if (legal.includes(8)) return 8; // torne
+      } else if (po.level === 4 && legal.includes(9)) return 9;
+      return 6; // vull
+    }
     const level = po.level;
 
     // Falta
@@ -580,6 +642,11 @@ function decideAction(state, myCards, qvals, legal) {
   // ── RESPOND_TRUC ──────────────────────────────────────────
   if (mode === 'respond_truc' && po?.kind === 'truc') {
     if (humanScore >= 11) return 10; // vull siempre
+    if (rivalReachesVictoryIfBotRejectsTruc(state, po)) {
+      if (po.level === 2 && legal.includes(12)) return 12; // retruque
+      if (po.level === 3 && legal.includes(13)) return 13; // val4
+      return 10; // vull (nivell 4 o sense pujada vàlida)
+    }
     const botPlayedThisTrick = getPlayed(h, BOT_SEAT) !== null;
     const strengthCards = cardsForTrucStrength(myCards, h);
     // Ja hem jugat la carta en aquesta basa i només queda el rival: mai retruc / val4
@@ -844,18 +911,21 @@ export async function botAct(state) {
       for (const i of legal) {
         if (qvals[i] > bestQ) { bestQ = qvals[i]; bestIdx = i; }
       }
+      bestIdx = clampBotIdxIfRejectGiftVictory(state, legal, bestIdx);
       return ALL_ACTIONS[bestIdx];
     } catch(e) {
       console.error('botAct RL error:', e);
       // Si el ML falla, caemos a las reglas como red de seguridad
       if (hayReglaDefinida) return ALL_ACTIONS[heuristicIdx];
-      const ri = legal[Math.floor(Math.random() * legal.length)];
+      let ri = legal[Math.floor(Math.random() * legal.length)];
+      ri = clampBotIdxIfRejectGiftVictory(state, legal, ri);
       return ALL_ACTIONS[ri];
     }
   }
 
   // Sin modelo cargado: seguir las reglas si las hay, si no, acción aleatoria legal
   if (hayReglaDefinida) return ALL_ACTIONS[heuristicIdx];
-  const ri = legal[Math.floor(Math.random() * legal.length)];
+  let ri = legal[Math.floor(Math.random() * legal.length)];
+  ri = clampBotIdxIfRejectGiftVictory(state, legal, ri);
   return ALL_ACTIONS[ri];
 }
