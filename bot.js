@@ -841,6 +841,52 @@ let _ortSession = null;
 let _botActive = false;
 let _botWasBluffingTruc = false;
 
+/** Meta síncrona per diàleg IA (consumida amb takeBotDialogueMeta); mai persistida. */
+let _pendingBotDialogueMeta = null;
+
+function buildBotDialogueMeta(state, chosenIdx) {
+  const h = state?.hand;
+  if (!h || chosenIdx < 0 || chosenIdx >= ALL_ACTIONS.length) return null;
+  const action = ALL_ACTIONS[chosenIdx];
+  const myCards = fromHObj(h.hands?.[K(BOT_SEAT)]);
+  const strengthCards = cardsForTrucStrength(myCards, h);
+  const hasBest =
+    strengthCards.includes('1_espadas') ||
+    strengthCards.includes('1_bastos');
+  const mpStr = maxPower(strengthCards);
+  let likelyBluffTruc = false;
+  let likelyBluffEnvit = false;
+  if (chosenIdx === 5 || chosenIdx === 12 || chosenIdx === 13) {
+    likelyBluffTruc = !hasBest && mpStr < 11;
+  }
+  const envPts = bestEnvit(myCards);
+  if (chosenIdx === 3) likelyBluffEnvit = envPts < 22;
+  if (chosenIdx === 4) likelyBluffEnvit = envPts < 28;
+  return {
+    chosenIdx,
+    action,
+    likelyBluffTruc,
+    likelyBluffEnvit,
+    envPtsApprox: envPts,
+    maxPowerApprox: maxPower(myCards),
+  };
+}
+
+function stashBotDialogueMeta(state, chosenIdx) {
+  try {
+    _pendingBotDialogueMeta = buildBotDialogueMeta(state, chosenIdx);
+  } catch {
+    _pendingBotDialogueMeta = null;
+  }
+}
+
+/** Consumeix i neteja l’última meta generada per `botAct` (una vegada per torn). */
+export function takeBotDialogueMeta() {
+  const x = _pendingBotDialogueMeta;
+  _pendingBotDialogueMeta = null;
+  return x;
+}
+
 export async function initBot() {
   try {
     _ortSession = await ort.InferenceSession.create('./Media/truc_bot.onnx');
@@ -871,6 +917,7 @@ export function isBotMatchState(state) {
 const BOT_ML_INSTINCT_PCT = 10;
 
 export async function botAct(state) {
+  _pendingBotDialogueMeta = null;
   if (!_botActive) return null;
   if (state?.hand?.turn !== BOT_SEAT) return null;
 
@@ -896,6 +943,7 @@ export async function botAct(state) {
 
   if (hayReglaDefinida && !usarInstintoML) {
     // 90%: seguir la norma escrita
+    stashBotDialogueMeta(state, heuristicIdx);
     return ALL_ACTIONS[heuristicIdx];
   }
 
@@ -912,20 +960,29 @@ export async function botAct(state) {
         if (qvals[i] > bestQ) { bestQ = qvals[i]; bestIdx = i; }
       }
       bestIdx = clampBotIdxIfRejectGiftVictory(state, legal, bestIdx);
+      stashBotDialogueMeta(state, bestIdx);
       return ALL_ACTIONS[bestIdx];
     } catch(e) {
       console.error('botAct RL error:', e);
       // Si el ML falla, caemos a las reglas como red de seguridad
-      if (hayReglaDefinida) return ALL_ACTIONS[heuristicIdx];
+      if (hayReglaDefinida) {
+        stashBotDialogueMeta(state, heuristicIdx);
+        return ALL_ACTIONS[heuristicIdx];
+      }
       let ri = legal[Math.floor(Math.random() * legal.length)];
       ri = clampBotIdxIfRejectGiftVictory(state, legal, ri);
+      stashBotDialogueMeta(state, ri);
       return ALL_ACTIONS[ri];
     }
   }
 
   // Sin modelo cargado: seguir las reglas si las hay, si no, acción aleatoria legal
-  if (hayReglaDefinida) return ALL_ACTIONS[heuristicIdx];
+  if (hayReglaDefinida) {
+    stashBotDialogueMeta(state, heuristicIdx);
+    return ALL_ACTIONS[heuristicIdx];
+  }
   let ri = legal[Math.floor(Math.random() * legal.length)];
   ri = clampBotIdxIfRejectGiftVictory(state, legal, ri);
+  stashBotDialogueMeta(state, ri);
   return ALL_ACTIONS[ri];
 }

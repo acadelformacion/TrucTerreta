@@ -28,6 +28,7 @@ import {
 } from "./profile.js";
 import { checkNickModeration } from "./moderation.js";
 import { srcFromChoice } from "./avatars.js";
+import { getVoiceEnabled, setVoiceEnabled } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -52,6 +53,30 @@ const LS = { room: "truc_room", seat: "truc_seat", name: "truc_name" };
 let _startSession = (_code) => {};
 export function configureLobby({ startSession }) {
   _startSession = startSession;
+}
+
+const BOT_PERSONALITY_LS = "botPersonality";
+const BOT_PERSONALITY_VALUES = ["iaio", "flipat", "serios"];
+
+/** Selector de personalitat del bot (overlay pre-partida vs bot; localStorage.botPersonality). */
+export function initBotPersonalityPicker() {
+  const wrap = $("botPersonalityRow");
+  if (!wrap || wrap.dataset.btpInit === "1") return;
+  wrap.dataset.btpInit = "1";
+  let saved = "iaio";
+  try {
+    const raw = localStorage.getItem(BOT_PERSONALITY_LS);
+    if (BOT_PERSONALITY_VALUES.includes(raw)) saved = raw;
+  } catch {}
+  wrap.querySelectorAll('input[name="botPersonality"]').forEach((inp) => {
+    inp.checked = inp.value === saved;
+    inp.addEventListener("change", () => {
+      if (!inp.checked) return;
+      try {
+        localStorage.setItem(BOT_PERSONALITY_LS, inp.value);
+      } catch {}
+    });
+  });
 }
 
 // --- Helpers -----------------------------------------------------------------
@@ -486,7 +511,15 @@ export function loadRoomList() {
         });
       }
     }
-    open.sort((a, b) => a.code.localeCompare(b.code));
+    open.sort((a, b) => {
+      const fullA = a.nPlayers >= a.maxCap;
+      const fullB = b.nPlayers >= b.maxCap;
+      if (fullA !== fullB) return fullA ? 1 : -1;
+      const freeA = a.maxCap - a.nPlayers;
+      const freeB = b.maxCap - b.nPlayers;
+      if (freeA !== freeB) return freeB - freeA;
+      return a.code.localeCompare(b.code);
+    });
     const newKey = open
       .map(
         (r) =>
@@ -950,6 +983,17 @@ export function initProfileModal() {
   const nickInput = $("profileNickInput");
   if (!modal || !backdrop || !closeBtn || !cancelBtn || !submitBtn || !nickInput) return;
 
+  function applyProfVoiceAvailability() {
+    const ok = !!(
+      typeof window !== "undefined" &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition)
+    );
+    modal.querySelectorAll(".prof-voice-opt").forEach((btn) => {
+      btn.disabled = !ok;
+      btn.title = ok ? "" : "El teu navegador no suporta reconeixement de veu.";
+    });
+  }
+
   const hide = () => {
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
@@ -1027,6 +1071,8 @@ export function initProfileModal() {
     
     _markActive(".prof-bg-opt", prof.tableBackground);
     _markActive(".prof-deck-opt", prof.cardDeck);
+    _markActive(".prof-voice-opt", String(getVoiceEnabled()));
+    applyProfVoiceAvailability();
 
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
@@ -1047,6 +1093,26 @@ export function initProfileModal() {
 
   modal.querySelectorAll(".prof-deck-opt").forEach((btn) => {
     btn.addEventListener("click", () => _markActive(".prof-deck-opt", btn.dataset.val));
+  });
+
+  modal.querySelectorAll(".prof-voice-opt").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const v = btn.dataset.val === "true";
+      setVoiceEnabled(v);
+      _markActive(".prof-voice-opt", String(v));
+      import("./voice.js").then((m) => {
+        if (!v) {
+          m.stopListening();
+          return;
+        }
+        import("./renderGame.js")
+          .then(({ getLastRoom, renderAll }) => {
+            const lr = getLastRoom();
+            if (lr) renderAll(lr);
+          })
+          .catch(() => {});
+      });
+    });
   });
 
   // Pas 1: Validació

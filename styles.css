@@ -259,6 +259,12 @@ body {
   pointer-events: none;
 }
 
+/* pointer-events no s’hereta: sense açò, els spans (.auth-copyright és flex-grow)
+   intercepten el ratolí damunt dels botons del lobby quan el peu fixed se solapa. */
+.auth-page-footer * {
+  pointer-events: none;
+}
+
 .auth-footer-row {
   display: flex;
   flex-direction: row;
@@ -907,6 +913,22 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.lobby-hub-logo-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: -4px 0 2px;
+}
+
+.lobby-hub-logo {
+  display: block;
+  width: min(100%, 220px);
+  height: auto;
+  max-height: min(16vh, 112px);
+  object-fit: contain;
+  filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.45));
+}
+
 @keyframes lobby-welcome-glow {
   0% {
     text-shadow:
@@ -1070,6 +1092,9 @@ body {
   flex-direction: column;
   gap: 10px;
   margin-top: 4px;
+  /* Apilament explícit: el peu del hub té z-index més alt perquè la zona scroll no intercepti els botons. */
+  position: relative;
+  z-index: 1;
 }
 
 .lobby-hub-main .lobby-rooms {
@@ -1082,12 +1107,14 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 12px;
   box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
 }
 
 .lobby-hub-main .room-list {
   flex: 1;
-  min-height: 100px;
-  max-height: min(42vh, 320px);
+  /* ~2–3 tarjetes rl-card (~72–88px + gap) visibles sense scroll excessiu */
+  min-height: min(260px, 52vh);
+  max-height: min(54vh, 460px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
@@ -1107,6 +1134,8 @@ body {
   margin-top: 12px;
   padding-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
+  position: relative;
+  z-index: 2;
 }
 
 .lobby-hub-footer-row {
@@ -1153,6 +1182,159 @@ body {
   .lobby-hub-footer-row #botBtn.lobby-hub-btn-bot {
     max-width: 30%;
     padding-inline: 6px !important;
+  }
+}
+
+/* Selector de personalitat del bot (dins del slot del rival, part inferior) */
+#waitingOverlay #slot-player-1 .bot-personality-panel {
+  margin-top: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: clamp(8px, 1.6vmin, 11px) clamp(6px, 1.2vmin, 9px);
+  border-radius: clamp(12px, 2vmin, 16px);
+  background: linear-gradient(
+    165deg,
+    rgba(20, 38, 32, 0.92) 0%,
+    rgba(8, 18, 14, 0.88) 100%
+  );
+  border: 1px solid rgba(232, 171, 42, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+}
+#waitingOverlay #slot-player-1 .bot-personality-panel.hidden {
+  display: none !important;
+}
+#waitingOverlay #slot-player-1:has(.bot-personality-panel:not(.hidden)) {
+  height: auto;
+  min-height: clamp(210px, 42vmin, 268px);
+}
+.bot-personality-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: clamp(6px, 1.2vmin, 9px);
+}
+.bot-personality-panel__icon {
+  font-size: clamp(13px, 2.8vmin, 16px);
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+.bot-personality-panel__title {
+  font-size: clamp(9px, 2vmin, 11px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(237, 210, 122, 0.95);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+.bot-personality-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(4px, 1vmin, 7px);
+  width: 100%;
+}
+.bot-personality-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  min-height: 0;
+  padding: clamp(6px, 1.2vmin, 9px) clamp(4px, 0.9vmin, 6px);
+  border-radius: clamp(10px, 1.8vmin, 13px);
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.14s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bot-personality-card:hover {
+  border-color: rgba(232, 171, 42, 0.38);
+  background: rgba(232, 171, 42, 0.08);
+}
+.bot-personality-card:active {
+  transform: scale(0.98);
+}
+.bot-personality-card:has(input:checked) {
+  border-color: rgba(232, 171, 42, 0.72);
+  background: linear-gradient(
+    180deg,
+    rgba(232, 171, 42, 0.18) 0%,
+    rgba(20, 42, 34, 0.55) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(232, 171, 42, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.bot-personality-card:has(input:focus-visible) {
+  outline: 2px solid rgba(232, 171, 42, 0.85);
+  outline-offset: 2px;
+}
+.bot-personality-card input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  pointer-events: none;
+}
+.bot-personality-card__emoji {
+  font-size: clamp(18px, 4.5vmin, 24px);
+  line-height: 1;
+}
+.bot-personality-card__name {
+  font-size: clamp(9px, 2vmin, 11px);
+  font-weight: 800;
+  color: #f2f7f3;
+  line-height: 1.15;
+  text-align: center;
+}
+.bot-personality-card__hint {
+  font-size: clamp(7px, 1.55vmin, 9px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+@media (max-width: 520px) {
+  .bot-personality-cards {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .bot-personality-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 2px;
+    text-align: left;
+  }
+  .bot-personality-card__emoji {
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+  .bot-personality-card__name {
+    align-self: end;
+    text-align: left;
+  }
+  .bot-personality-card__hint {
+    grid-column: 2;
+    text-align: left;
+    -webkit-line-clamp: 2;
   }
 }
 
@@ -1735,6 +1917,68 @@ body {
   touch-action: manipulation;
 }
 
+/* Indicador de veu: fora del flux (dins .player-avatar-wrap) per no moure cartes ni nick */
+#voiceHud {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(100% + 4px);
+  display: flex;
+  justify-content: center;
+  width: max-content;
+  max-width: min(11rem, 46vw);
+  margin: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+.voice-hud-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.voice-hud-mic {
+  display: inline-block;
+  font-size: 1.35rem;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.45;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+#voiceHud.voice-hud-active .voice-hud-mic {
+  filter: grayscale(0);
+  opacity: 1;
+}
+@keyframes voiceHudPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+.voice-hud-pulse {
+  animation: voiceHudPulse 1.1s ease-in-out infinite;
+}
+.voice-hud-transcript {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gold);
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  line-height: 1.25;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--border);
+  word-break: break-word;
+}
+.voice-hud-transcript.hidden {
+  display: none !important;
+}
 
 .offer-msg {
   text-align: center;
@@ -2125,14 +2369,12 @@ body {
   box-sizing: border-box;
   letter-spacing: 0.04em;
   color: var(--text);
-  border-color: rgba(232, 171, 42, 0.35);
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--felt) 72%, transparent),
     rgba(11, 21, 18, 0.82) 50%,
     color-mix(in srgb, var(--felt) 72%, transparent)
   );
-  box-shadow: inset 0 0 0 1px rgba(232, 171, 42, 0.2);
   will-change: transform;
 }
 .versus-banner-inner {
@@ -2173,11 +2415,9 @@ body {
 }
 #vsBannerTop {
   top: 0;
-  border-bottom: 1px solid rgba(232, 171, 42, 0.35);
 }
 #vsBannerBottom {
   bottom: 0;
-  border-top: 1px solid rgba(232, 171, 42, 0.35);
 }
 #vsText {
   position: absolute;
@@ -2478,6 +2718,10 @@ body {
   .lobby-hub {
     min-height: 0;
     max-height: min(85vh, calc(100vh - var(--lobby-page-footer-reserve) - 4.25rem));
+  }
+  .lobby-hub-logo {
+    max-height: min(12vh, 88px);
+    width: min(100%, 180px);
   }
 }
 
@@ -3360,6 +3604,36 @@ body:not([data-mode="2v2"]) #slot-player-1 .waiting-invite-side-text span {
 .msg-mine {
   bottom: 30%;
 }
+.table-msg-bubble.voice-mic-hint-bubble {
+  bottom: 26%;
+  max-width: min(92vw, 22rem);
+  padding: 0 14px;
+  font-size: clamp(13px, 3.4vw, 15px);
+  font-weight: 700;
+  text-transform: none;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  text-align: center;
+  animation: bubbleHintRead 7.4s ease-out forwards !important;
+}
+@keyframes bubbleHintRead {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  6% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  86% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+}
 .msg-rival {
   top: 30%;
 }
@@ -3513,6 +3787,12 @@ body:not([data-mode="2v2"]) #slot-player-1 .waiting-invite-side-text span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .my-zone-header {
+    margin-top: 14px;
+  }
 }
 
 /* Barra rival desconnectat */
@@ -3809,7 +4089,7 @@ body:not([data-mode="2v2"]) #slot-player-1 .waiting-invite-side-text span {
 .lobby-rooms {
   width: 100%;
   position: relative;
-  min-height: 120px;
+  min-height: 160px;
 }
 .rl-title {
   font-size: 11px;
@@ -4491,8 +4771,9 @@ body:not([data-mode="2v2"]) #slot-player-1 .waiting-invite-side-text span {
   transform: scale(1.05);
 }
 
-/* Assegurem que els elements de la taula estiguin per sobre del fons (no .table-bg-layer: fixed + z-index al seu bloc) */
-#table > *:not(#deckPile):not(.table-bg-layer) {
+/* Assegurem que els elements de la taula estiguin per sobre del fons (no .table-bg-layer: fixed + z-index al seu bloc).
+   #myZone queda fora per respectar el seu z-index: 6 (avatar per damunt del mazo lateral esquerre). */
+#table > *:not(#deckPile):not(.table-bg-layer):not(#myZone) {
   position: relative;
   z-index: 1;
 }
@@ -4681,6 +4962,14 @@ body.btn-large #actionBtns {
 }
 .speech-bubble.hidden {
   display: none !important;
+}
+
+/* Bombolla IA (sense animació CSS; GSAP controla entrada/eixida) */
+.bot-ai-speech-bubble.speech-bubble {
+  animation: none !important;
+  overflow: visible;
+  max-height: none;
+  text-overflow: clip;
 }
 
 @keyframes popIn {

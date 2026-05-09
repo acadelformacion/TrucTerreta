@@ -125,6 +125,15 @@ PANTALLA 1 · LOBBY
 
   <div id="pantalla-lobby" class="lobby-wrap lobby-hub hidden">
     <div id="user-profile" class="user-profile">
+      <div class="lobby-hub-logo-wrap">
+        <img
+          class="lobby-hub-logo"
+          src="Media/Images/Others/logo-prueba.webp"
+          alt="El Truc de la Terreta"
+          width="220"
+          decoding="async"
+        />
+      </div>
       <p id="lobbyWelcomeLine" class="lobby-welcome-line" aria-live="polite"></p>
       <div class="user-profile-inner">
         <div class="user-profile-left">
@@ -333,6 +342,22 @@ PANTALLA 2 · MESA DE JUEGO
       <button class="cfg-opt" data-cfg="vibration" data-val="false">No</button>
     </div>
   </div>
+
+  <div class="cfg-section hidden" id="cfgBotDialogueSection">
+    <div class="cfg-label">🤖 Comentaris del bot (IA)</div>
+    <div class="cfg-options">
+      <button type="button" class="cfg-opt" data-cfg="botDialogueEnabled" data-val="true">Sí</button>
+      <button type="button" class="cfg-opt" data-cfg="botDialogueEnabled" data-val="false">Silenciar</button>
+    </div>
+  </div>
+
+  <div class="cfg-section" id="cfgVoiceSection">
+    <div class="cfg-label">🎤 Cantar jugades per veu</div>
+    <div class="cfg-options">
+      <button type="button" class="cfg-opt" data-cfg="voiceEnabled" data-val="true">Sí</button>
+      <button type="button" class="cfg-opt" data-cfg="voiceEnabled" data-val="false">No</button>
+    </div>
+  </div>
 </div>
 
   <!-- PANEL ACCIONES inferior -->
@@ -465,6 +490,37 @@ PANTALLA 2 · MESA DE JUEGO
               </button>
               <button type="button" id="waitSlotSitBtn1" class="sit-here-btn hidden">Sentar-se ací</button>
               <div id="waitSlotBadge1" class="slot-badge" data-state="pendent">Pendent...</div>
+
+              <div
+                id="botPersonalityRow"
+                class="bot-personality-panel hidden"
+                aria-label="Personalitat del bot"
+              >
+                <div class="bot-personality-panel__head">
+                  <span class="bot-personality-panel__icon" aria-hidden="true">🎭</span>
+                  <span id="botPersonalityPanelTitle" class="bot-personality-panel__title">Personalitat del rival</span>
+                </div>
+                <div class="bot-personality-cards" role="radiogroup" aria-labelledby="botPersonalityPanelTitle">
+                  <label class="bot-personality-card">
+                    <input type="radio" name="botPersonality" value="iaio" checked />
+                    <span class="bot-personality-card__emoji" aria-hidden="true">🧓</span>
+                    <span class="bot-personality-card__name">El Iaio</span>
+                    <span class="bot-personality-card__hint">Nostàlgic i amb bon rotllo</span>
+                  </label>
+                  <label class="bot-personality-card">
+                    <input type="radio" name="botPersonality" value="flipat" />
+                    <span class="bot-personality-card__emoji" aria-hidden="true">😎</span>
+                    <span class="bot-personality-card__name">El Flipat</span>
+                    <span class="bot-personality-card__hint">Fanfarró i provocador</span>
+                  </label>
+                  <label class="bot-personality-card">
+                    <input type="radio" name="botPersonality" value="serios" />
+                    <span class="bot-personality-card__emoji" aria-hidden="true">😐</span>
+                    <span class="bot-personality-card__name">El Seriós</span>
+                    <span class="bot-personality-card__hint">Lacònic i intimidador</span>
+                  </label>
+                </div>
+              </div>
             </div>
             <div id="slot-player-3" class="player-wait-slot hidden" data-seat="3">
               <span class="slot-role">Jugador 4</span>
@@ -761,6 +817,13 @@ PANTALLA 2 · MESA DE JUEGO
       </div>
     </div>
 
+    <div class="cfg-section" style="margin-bottom:0;">
+      <div class="cfg-label">🎤 Cantar jugades per veu</div>
+      <div class="cfg-options">
+        <button type="button" class="cfg-opt prof-voice-opt" data-val="true">Sí</button>
+        <button type="button" class="cfg-opt prof-voice-opt" data-val="false">No</button>
+      </div>
+    </div>
 
     <div class="create-room-actions">
       <button type="button" class="create-room-btn-secondary" id="profileModalCancel">Cancel·lar</button>

@@ -8,6 +8,9 @@ const DEFAULT_CONFIG = {
   tableBackground: "verde", // 'verde' | 'azul' | 'bg3'
   sound: true, // true | false
   vibration: true, // true | false
+  voiceEnabled: false, // opt-in per cantar jugades per veu
+  /** Frases IA del bot vs bot (cosmètic) */
+  botDialogueEnabled: true,
 };
 
 // Carga config desde localStorage, fusionando con defaults
@@ -51,4 +54,12 @@ export function isSoundEnabled() {
 
 export function isVibrationEnabled() {
   return loadConfig().vibration !== false;
+}
+
+export function getVoiceEnabled() {
+  return loadConfig().voiceEnabled === true;
+}
+
+export function setVoiceEnabled(on) {
+  setConfig("voiceEnabled", !!on);
 }

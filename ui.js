@@ -48,6 +48,7 @@ import {
   openCreateRoomModal,
   openPrivateCodeModal,
   configureLobby,
+  initBotPersonalityPicker,
   changeSeat,
   initStatsModal,
   initStatsPromoModal,
@@ -60,6 +61,8 @@ import {
   stopConfetti,
   animateScreenShake,
   changeTableBackground,
+  repositionBotAiSpeechBubble,
+  disposeBotAiSpeechBubble,
 } from "./animations.js";
 import {
   initChat,
@@ -104,11 +107,14 @@ import { isBotActive, isBotMatchState, setBotActive, initBot } from "./bot.js";
 import { warmupMatchAssets, preloadAllTableBackgrounds } from "./assetPreloader.js";
 import { isSpritesheetReady, spritesheetReady } from "./spritesheet.js";
 let _actionInProgress = false;
+/** Si l'usuari acaba d'activar la veu des del panel i cal mostrar l'avís en tancar. */
+let _voiceMicHintPending = false;
 const $ = (id) => document.getElementById(id);
 
 function applyMatchConfig() {
   applyConfig();
   const bgCfgSection = $("cfgTableBackgroundSection");
+  const cfgBotDlgSection = $("cfgBotDialogueSection");
   const botMatch = isBotActive();
   
   const cfg = loadConfig();
@@ -117,6 +123,7 @@ function applyMatchConfig() {
   changeTableBackground(bgName);
 
   bgCfgSection?.classList.toggle("hidden", botMatch);
+  cfgBotDlgSection?.classList.toggle("hidden", !botMatch);
 }
 
 export function refreshLiveProfileVisuals() {
@@ -517,6 +524,10 @@ export function detachRoomListeners() {
   cancelPreGameRoomOnDisconnect();
   clearAbsenceTimers();
   clearStickyStarsRecoveryWatchdog();
+  disposeBotAiSpeechBubble();
+  import("./voice.js")
+    .then((m) => m.stopListening())
+    .catch(() => {});
 }
 
 async function leaveRoom() {
@@ -524,6 +535,9 @@ async function leaveRoom() {
     $("screenLobby").classList.remove("hidden");
     $("screenGame").classList.add("hidden");
     setLobbyMsg("", "");
+    import("./voice.js")
+      .then((m) => m.stopListening())
+      .catch(() => {});
     return;
   }
   const code = session.roomCode;
@@ -551,7 +565,7 @@ function initLegalModal() {
   const modal = $("legalModal");
   const backdrop = $("legalModalBackdrop");
   const closeBtn = $("legalModalClose");
-  const openBtn = $("legalOpenBtn");
+  const openBtn = $("legalModalOpen");
   if (!modal) return;
   const open = () => modal.classList.remove("hidden");
   const close = () => modal.classList.add("hidden");
@@ -631,6 +645,38 @@ const wrappedRenderAll = async (data) => {
   renderAll(data);
 };
 
+function showVoiceMicHintBubble() {
+  const bubble = document.createElement("div");
+  bubble.className = "table-msg-bubble msg-mine voice-mic-hint-bubble";
+  bubble.textContent =
+    "🎤 A partir d'ara pots cantar les jugades amb veu.\n\n" +
+    "Digues «Truc», «Envit»… quan siga el teu torn.\n\n" +
+    "Has d'acceptar el permís del micròfon si el navegador t'ho demana.";
+  document.body.appendChild(bubble);
+  setTimeout(() => bubble.remove(), 7600);
+}
+
+function maybeShowVoiceMicHintAfterConfigClose() {
+  if (!_voiceMicHintPending || loadConfig().voiceEnabled !== true) return;
+  _voiceMicHintPending = false;
+  showVoiceMicHintBubble();
+}
+
+function applyVoiceToggleAvailability() {
+  const ok = !!(
+    typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition)
+  );
+  document.querySelectorAll('[data-cfg="voiceEnabled"]').forEach((btn) => {
+    btn.disabled = !ok;
+    btn.title = ok ? "" : "El teu navegador no suporta reconeixement de veu.";
+  });
+  document.querySelectorAll(".prof-voice-opt").forEach((btn) => {
+    btn.disabled = !ok;
+    btn.title = ok ? "" : "El teu navegador no suporta reconeixement de veu.";
+  });
+}
+
 export function initApp() {
   initNetworkStatusBanner();
   configureActions({
@@ -639,7 +685,20 @@ export function initApp() {
   });
   configureAvatars({ renderAll: wrappedRenderAll });
   configureLobby({ startSession });
+  initBotPersonalityPicker();
   configureRenderer({ resetInactivity });
+  import("./voice.js").then((m) => {
+    m.initVoice({
+      notifyUser: (msg) => showTableMsgLocal(msg, true),
+      refreshAfterAction: () =>
+        get(session.roomRef)
+          .then((snap) => {
+            if (snap?.val()) wrappedRenderAll(snap.val());
+          })
+          .catch(() => {}),
+    });
+  });
+  applyVoiceToggleAvailability();
   initAuthFlow();
   initLegalModal();
   initCreateRoomModal();
@@ -724,9 +783,18 @@ export function initApp() {
   $("myAvatarContainer")?.addEventListener("click", togglePhraseMenu);
   $("myAvatarContainer")?.addEventListener("touchend", onPhraseAvatarTap);
 
-  window.addEventListener("resize", onGameViewportChange);
-  window.visualViewport?.addEventListener("resize", onGameViewportChange);
-  window.visualViewport?.addEventListener("scroll", onGameViewportChange);
+  window.addEventListener("resize", () => {
+    onGameViewportChange();
+    repositionBotAiSpeechBubble();
+  });
+  window.visualViewport?.addEventListener("resize", () => {
+    onGameViewportChange();
+    repositionBotAiSpeechBubble();
+  });
+  window.visualViewport?.addEventListener("scroll", () => {
+    onGameViewportChange();
+    repositionBotAiSpeechBubble();
+  });
 
   // Tancar el menú si es fa clic fora (no cal excloure rival per obrir; només my obre)
   document.addEventListener("click", (e) => {
@@ -793,6 +861,10 @@ export function initApp() {
   $("configBtn").addEventListener("click", () => {
     applyMatchConfig();
     $("configPanel").classList.toggle("hidden");
+    if ($("configPanel").classList.contains("hidden")) {
+      maybeShowVoiceMicHintAfterConfigClose();
+    }
+    applyVoiceToggleAvailability();
     // Marca el botón activo de cada sección
     const cfg = loadConfig();
     document.querySelectorAll(".cfg-opt").forEach((btn) => {
@@ -805,21 +877,43 @@ export function initApp() {
 
   $("configClose").addEventListener("click", () => {
     $("configPanel").classList.add("hidden");
+    maybeShowVoiceMicHintAfterConfigClose();
   });
 
   document.querySelectorAll(".cfg-opt").forEach((btn) => {
     btn.addEventListener("click", () => {
       const key = btn.dataset.cfg;
+      if (!key) return;
       let val = btn.dataset.val;
       // Convierte 'true'/'false' string a boolean para el sonido
       if (val === "true") val = true;
       if (val === "false") val = false;
+      const cfgSnapshot = loadConfig();
       setConfig(key, val);
+      if (key === "voiceEnabled") {
+        if (val === true && cfgSnapshot.voiceEnabled !== true) {
+          _voiceMicHintPending = true;
+        }
+        if (val === false) _voiceMicHintPending = false;
+      }
       applyMatchConfig();
       // Actualiza visual de botones activos en esa sección
       document.querySelectorAll(`.cfg-opt[data-cfg="${key}"]`).forEach((b) => {
         b.classList.toggle("active", b.dataset.val === String(val));
       });
+      if (key === "voiceEnabled") {
+        import("./voice.js").then((m) => {
+          if (!val) {
+            m.stopListening();
+            return;
+          }
+          get(session.roomRef)
+            .then((snap) => {
+              if (snap?.val()) wrappedRenderAll(snap.val());
+            })
+            .catch(() => {});
+        });
+      }
     });
   });
   // --------------------------------------------------------------------------

@@ -245,9 +245,15 @@ export function playVersusIntro(
     gsapLib.set(vsText, {
       xPercent: -50,
       yPercent: -50,
-      scale: 2,
+      scale: 0.06,
+      opacity: 0,
+      rotation: -10,
       transformOrigin: "50% 50%",
     });
+
+    const bannerInDur = 0.55;
+    const vsDelayAfterBanners = 0.5;
+    const vsT0 = bannerInDur + vsDelayAfterBanners;
 
     const tl = gsapLib.timeline({
       onComplete: () => {
@@ -261,13 +267,42 @@ export function playVersusIntro(
       },
     });
 
-    tl.to(topBanner, { yPercent: 0, duration: 0.55, ease: "power2.out" }, 0);
-    tl.to(bottomBanner, { yPercent: 0, duration: 0.55, ease: "power2.out" }, 0);
-    tl.to(vsText, { scale: 1, duration: 0.65, ease: "back.out(1.7)" }, ">");
+    tl.to(topBanner, { yPercent: 0, duration: bannerInDur, ease: "power2.out" }, 0);
+    tl.to(
+      bottomBanner,
+      { yPercent: 0, duration: bannerInDur, ease: "power2.out" },
+      0,
+    );
+    tl.fromTo(
+      vsText,
+      {
+        scale: 0.06,
+        opacity: 0,
+        rotation: -10,
+      },
+      {
+        scale: 1.22,
+        opacity: 1,
+        rotation: 4,
+        duration: 0.26,
+        ease: "power4.out",
+      },
+      vsT0,
+    );
+    tl.to(
+      vsText,
+      {
+        scale: 1,
+        rotation: 0,
+        duration: 0.62,
+        ease: "elastic.out(1, 0.38)",
+      },
+      ">",
+    );
     tl.to(
       overlay,
       { opacity: 0, duration: 0.5, ease: "power2.inOut" },
-      "+=1.5",
+      "+=1.35",
     );
   });
 }
@@ -1076,4 +1111,145 @@ export function changeTableBackground(bgName) {
     newLayer.style.opacity = "1";
     existingLayers.forEach(layer => layer.remove());
   }
+}
+
+// --- Bombolla IA del bot (rival, cosmètica) ----------------------------------
+let _botAiBubbleEl = null;
+let _botAiDismissTimer = null;
+
+function positionBotAiBubble() {
+  const el = _botAiBubbleEl;
+  const av = document.getElementById("rivalAvatarContainer");
+  if (!el || !av || el.classList.contains("hidden")) return;
+
+  const vv = window.visualViewport;
+  const vw = vv?.width ?? window.innerWidth;
+  const pad = 12;
+  const maxBw = Math.min(272, Math.max(80, vw - pad * 2));
+
+  el.style.width = "auto";
+  el.style.maxWidth = `${maxBw}px`;
+  const measured = Math.ceil(el.getBoundingClientRect().width);
+  const bw = Math.min(maxBw, Math.max(96, measured));
+  el.style.width = `${bw}px`;
+
+  const rect = av.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  let left = cx - bw / 2;
+  left = Math.max(pad, Math.min(left, vw - pad - bw));
+
+  el.style.position = "fixed";
+  el.style.left = `${left}px`;
+  el.style.right = "auto";
+  el.style.top = `${rect.bottom + 8}px`;
+  el.style.bottom = "auto";
+  el.style.transform = "none";
+  el.style.zIndex = "1200";
+}
+
+function ensureBotAiBubbleEl() {
+  if (_botAiBubbleEl) return _botAiBubbleEl;
+  const el = document.createElement("div");
+  el.id = "botAiSpeechBubble";
+  el.className =
+    "bot-ai-speech-bubble speech-bubble rival-bubble hidden";
+  el.setAttribute("aria-live", "polite");
+  document.body.appendChild(el);
+  _botAiBubbleEl = el;
+  return el;
+}
+
+/** Reposiciona la bombolla si és visible (resize / visualViewport). */
+export function repositionBotAiSpeechBubble() {
+  try {
+    positionBotAiBubble();
+  } catch (_) {}
+}
+
+/** Elimina tweens, timers i el node (sortida de sala). */
+export function disposeBotAiSpeechBubble() {
+  try {
+    const g = globalThis.gsap;
+    if (_botAiDismissTimer) {
+      clearTimeout(_botAiDismissTimer);
+      _botAiDismissTimer = null;
+    }
+    if (_botAiBubbleEl && g) g.killTweensOf(_botAiBubbleEl);
+    _botAiBubbleEl?.remove();
+    _botAiBubbleEl = null;
+  } catch (_) {}
+}
+
+/**
+ * Mostra una frase prop del rival; substitueix la anterior si n’hi ha.
+ */
+export function showBotAiSpeechBubble(text) {
+  try {
+    const cleaned = String(text || "").trim();
+    if (!cleaned) return;
+
+    const g = globalThis.gsap;
+    const el = ensureBotAiBubbleEl();
+
+    if (_botAiDismissTimer) {
+      clearTimeout(_botAiDismissTimer);
+      _botAiDismissTimer = null;
+    }
+    if (g) g.killTweensOf(el);
+
+    el.style.removeProperty("width");
+    el.style.removeProperty("max-width");
+
+    el.textContent = cleaned;
+    el.classList.remove("hidden");
+    positionBotAiBubble();
+    requestAnimationFrame(() => {
+      try {
+        positionBotAiBubble();
+      } catch (_) {}
+    });
+
+    const fadeOutAndHide = () => {
+      try {
+        if (g) {
+          g.to(el, {
+            opacity: 0,
+            y: "-=6",
+            duration: 0.35,
+            ease: "power2.in",
+            onComplete: () => {
+              try {
+                el.textContent = "";
+                el.classList.add("hidden");
+                globalThis.gsap?.set(el, { clearProps: "opacity,transform" });
+              } catch (_) {}
+            },
+          });
+        } else {
+          el.textContent = "";
+          el.classList.add("hidden");
+        }
+      } catch (_) {}
+      _botAiDismissTimer = null;
+    };
+
+    const readMs = Math.min(
+      18000,
+      Math.max(4500, 2200 + cleaned.length * 38),
+    );
+
+    if (g) {
+      g.set(el, { opacity: 0, y: 8 });
+      g.to(el, {
+        opacity: 1,
+        y: 0,
+        duration: 0.35,
+        ease: "power2.out",
+      });
+      _botAiDismissTimer = setTimeout(fadeOutAndHide, readMs);
+    } else {
+      el.style.opacity = "1";
+      _botAiDismissTimer = setTimeout(fadeOutAndHide, readMs);
+    }
+  } catch (_) {}
 }

@@ -34,7 +34,7 @@ import {
   animateRivalPlay,
   animateScreenShake,
   animateTrickCollect,
-  setupHoverDynamics
+  setupHoverDynamics,
 } from "./animations.js";
 import { syncOfferBubblesFromState, showBubble } from "./chat.js";
 import {
@@ -47,14 +47,19 @@ import {
   renderWaitingSlots,
 } from "./avatars.js";
 import { bumpStoredWinsIfWonGame } from "./auth.js";
-import { isVibrationEnabled } from "./config.js";
+import { getVoiceEnabled, isVibrationEnabled } from "./config.js";
 import {
   isBotActive,
   isBotMatchState,
   botAct,
   resetBotMemory,
   updateBotMemory,
+  takeBotDialogueMeta,
 } from "./bot.js";
+import {
+  requestBotPhraseSilently,
+  requestBotPhraseAfterBotAction,
+} from "./botDialogue.js";
 import { getCardStyle } from "./spritesheet.js";
 
 // --- Helpers locales ----------------------------------------------------------
@@ -114,6 +119,65 @@ function getScore(st, seat) {
   return real(st?.scores?.[K(seat)]);
 }
 
+function maybeBotAdvanceHandAfterSummary(state) {
+  if (!isBotActive() || !state.lastHandSummary) return;
+  const hn = real(state.handNumber || OFFSET);
+  if (hn === _prevHandNumber) return;
+  _prevHandNumber = hn;
+  const humanSeat = 0;
+  updateBotMemory(state.lastHandSummary, humanSeat, state.scores);
+  const w = state.lastHandSummary?.winner;
+  if (w !== 0 && w !== 1) return;
+  const botTeam = teamOf(1);
+  const trigger = w === botTeam ? "BOT_HAND_WON" : "BOT_HAND_LOST";
+  requestBotPhraseSilently({
+    trigger,
+    state,
+    action: null,
+    dialogueMeta: null,
+    handSummary: state.lastHandSummary,
+  });
+}
+
+function maybeBotTrickOutcomeDialogue(state) {
+  if (!isBotActive()) return;
+  if (
+    state.status !== "playing" ||
+    !state.hand ||
+    state.hand.status !== "in_progress"
+  )
+    return;
+  const hk = `${real(state.handNumber || OFFSET)}-${state.hand.mano ?? "x"}-${session.roomCode || ""}`;
+  if (hk !== _botDlgTrickKey) {
+    _botDlgTrickKey = hk;
+    _botDlgTrickLen = 0;
+  }
+  const hist = state.hand.trickHistory || [];
+  const len = hist.length;
+  if (len <= _botDlgTrickLen) return;
+  const newEntries = hist.slice(_botDlgTrickLen);
+  _botDlgTrickLen = len;
+  for (const entry of newEntries) {
+    if (
+      entry == null ||
+      entry.winner === 99 ||
+      entry.winner === undefined ||
+      entry.winner === null
+    )
+      continue;
+    const botTeam = teamOf(1);
+    const trigger =
+      entry.winner === botTeam ? "BOT_TRICK_WON" : "BOT_TRICK_LOST";
+    requestBotPhraseSilently({
+      trigger,
+      state,
+      action: null,
+      dialogueMeta: null,
+      handSummary: null,
+    });
+  }
+}
+
 // --- Estado de render ---------------------------------------------------------
 let _prevStatus = "";
 let _prevHandNumber = -1;
@@ -139,12 +203,17 @@ let _openingFullDealKey = "";
 let _openingFullDealDoneKey = "";
 let _openingFullDealSeatIdx = 0;
 let _openingFullDealAnimating = false;
+/** Durant repartiment rival: no fer `replaceChildren` a aquesta zona (GSAP anima els mateixos nodes). */
+let _openingDealPreserveRivalZoneEl = null;
 /** Retorn de showHoldCenterTableMessage("Bona sort!") */
 let _dismissBonaSort = null;
 let _lastIncomingOfferVibrationKey = "";
 let _botThinking = false;
 let _prevRivalPlayedCount = 0;
 let _prevPendingOfferStr = "";
+/** Seguiment de bazas per frases IA del bot */
+let _botDlgTrickKey = "";
+let _botDlgTrickLen = 0;
 
 export let optimisticCardIndex = null;
 export function setOptimisticCard(index) { optimisticCardIndex = index; }
@@ -238,6 +307,14 @@ let _resetInactivity = () => {};
 
 export function configureRenderer({ resetInactivity }) {
   _resetInactivity = resetInactivity;
+}
+
+let _voiceModulePromise = null;
+function syncVoiceListening(shouldListen, state) {
+  if (!_voiceModulePromise) _voiceModulePromise = import("./voice.js");
+  _voiceModulePromise
+    .then((m) => m.syncListeningFromGame({ shouldListen, state }))
+    .catch(() => {});
 }
 
 function vibratePattern(pattern) {
@@ -746,6 +823,14 @@ function renderPlayerZone(zoneEl, handObj, zoneMode = "normal") {
     zoneEl.setAttribute("data-count", "0");
     return;
   }
+  if (
+    zoneMode === "dealIntro" &&
+    _openingFullDealAnimating &&
+    zoneEl === _openingDealPreserveRivalZoneEl &&
+    zoneEl.querySelectorAll(".rival-card-slot").length === 3
+  ) {
+    return;
+  }
   zoneEl.replaceChildren();
   const cards = fromHObj(handObj);
   const n = cards.length;
@@ -821,6 +906,7 @@ function syncHandDealSequenceState(state) {
     _openingFullDealSeatIdx = 0;
     _openingFullDealDoneKey = "";
     _openingFullDealAnimating = false;
+    _openingDealPreserveRivalZoneEl = null;
   }
 }
 
@@ -864,6 +950,7 @@ function finishOpeningFullDeal() {
   }
   _openingFullDealDoneKey = _openingFullDealKey;
   _openingFullDealAnimating = false;
+  _openingDealPreserveRivalZoneEl = null;
   _introPlayed = true;
   if (_lastRoom) renderAll(_lastRoom);
 }
@@ -890,11 +977,14 @@ function tryRunOpeningDealAnimation(state) {
   if (wraps.length !== 3) return;
 
   _openingFullDealAnimating = true;
+  _openingDealPreserveRivalZoneEl =
+    seat === session.mySeat ? null : zone;
   const myCardsForFlip =
     seat === session.mySeat ? fromHObj(h.hands?.[K(seat)]) : [];
 
   const onDealAnimationComplete = () => {
     _openingFullDealAnimating = false;
+    _openingDealPreserveRivalZoneEl = null;
     _openingFullDealSeatIdx++;
     if (_lastRoom) renderAll(_lastRoom);
   };
@@ -953,17 +1043,13 @@ function tryRunOpeningDealAnimation(state) {
       },
     });
   } else {
-    const g = globalThis.gsap;
     const rivalSide = zone.classList.contains("side-cards");
     animateMyHandDealFromDeck(wraps, {
       dealSequenceIndex: _openingFullDealSeatIdx,
       onDealAnimationComplete,
       dealLayout: rivalSide ? "rivalSide" : "rivalAbanico",
-      // Mateixa branca stack+stagger que el jugador (sense girar cares).
-      flipAllSubtimeline() {
-        if (!g) return null;
-        return g.timeline();
-      },
+      // Sense flipAllSubtimeline: branca seqüencial carta a carta (com la mà humana percep el repartiment),
+      // sense fase muntó+abanic que reordena visualment.
     });
   }
 }
@@ -1050,6 +1136,7 @@ export function resetHandIntroPlayed() {
   _openingFullDealDoneKey = "";
   _openingFullDealSeatIdx = 0;
   _openingFullDealAnimating = false;
+  _openingDealPreserveRivalZoneEl = null;
   if (typeof _dismissBonaSort === "function") {
     _dismissBonaSort();
     _dismissBonaSort = null;
@@ -1797,12 +1884,15 @@ function botActionFlyCaption(action, state) {
   return "";
 }
 
-async function executeBotAction(action, state) {
+async function executeBotAction(action, state, dialogueMeta) {
   const [type] = action;
   if (type === "PLAY_CARD") {
     const cards = fromHObj(state.hand.hands[K(1)]);
     const card = cards[action[1]];
-    if (card) await playCardAsBot(card);
+    if (card) {
+      await playCardAsBot(card);
+      requestBotPhraseAfterBotAction(state, action, dialogueMeta);
+    }
     return;
   }
   const caption = botActionFlyCaption(action, state);
@@ -1825,6 +1915,7 @@ async function executeBotAction(action, state) {
       showBubble("rivalBubble", caption);
     }
   }
+  requestBotPhraseAfterBotAction(state, action, dialogueMeta);
 }
 
 /** Retard "humà" del bot abans d'actuar (1-5 s). */
@@ -1878,17 +1969,19 @@ function scheduleBotIfNeededFromGameState(state) {
     }
     botAct(st)
       .then(async (action) => {
+        let meta = takeBotDialogueMeta();
         if (action) {
           didRunAction = true;
-          await executeBotAction(action, st);
+          await executeBotAction(action, st, meta);
           return;
         }
         st = _lastRoom?.state;
         if (!canBotActInState(st, botSeat)) return;
         const action2 = await botAct(st);
+        meta = takeBotDialogueMeta();
         if (action2) {
           didRunAction = true;
-          await executeBotAction(action2, st);
+          await executeBotAction(action2, st, meta);
         }
       })
       .catch((e) => console.error("bot error:", e))
@@ -2399,20 +2492,9 @@ export function renderAll(room) {
     renderActions(state);
     renderLog(state);
     _prevStatus = state.status;
-    // Detectar fin de mano y actualizar memoria del bot
-    if (isBotActive() && state.lastHandSummary) {
-      const hn = real(state.handNumber || OFFSET);
-      if (hn !== _prevHandNumber) {
-        _prevHandNumber = hn;
-        const humanSeat = 1 - 1;
-        updateBotMemory(
-          state.lastHandSummary,
-          humanSeat,
-          state.scores,
-        );
-      }
-    }
+    maybeBotAdvanceHandAfterSummary(state);
     // Durant l'overlay VS: sense render complet ni programació del bot (això va al .then de playVersusIntro).
+    syncVoiceListening(false, state);
     return;
   }
 
@@ -2472,6 +2554,7 @@ export function renderAll(room) {
       });
     }
     abModal.classList.remove("hidden");
+    syncVoiceListening(false, state);
     return;
   }
 
@@ -2541,6 +2624,7 @@ export function renderAll(room) {
       }
     }
     renderRematchStatus(state);
+    syncVoiceListening(false, state);
   } else {
     if (!$("gameOverOverlay").classList.contains("hidden")) {
       $("gameOverOverlay").classList.add("hidden");
@@ -2599,6 +2683,7 @@ export function renderAll(room) {
       }
       const isBotMatch = isBotActive();
       const canStartMatch = isBotMatch ? bothJoined : allFirebaseReady;
+      $("botPersonalityRow")?.classList.toggle("hidden", !isBotMatch);
 
       // Mostrar/ocultar slots 2 i 3 segons mode
       const slot2 = $("slot-player-2");
@@ -2687,19 +2772,8 @@ export function renderAll(room) {
         startBetween(buildScoreSummary(state), handSummaryHasEnvit(state) ? 1000 : 0, state);
     }
     _prevStatus = state.status;
-    // Detectar fin de mano y actualizar memoria del bot
-    if (isBotActive() && state.lastHandSummary) {
-      const hn = real(state.handNumber || OFFSET);
-      if (hn !== _prevHandNumber) {
-        _prevHandNumber = hn;
-        const humanSeat = 1 - 1;
-        updateBotMemory(
-          state.lastHandSummary,
-          humanSeat,
-          state.scores,
-        );
-      }
-    }
+    maybeBotAdvanceHandAfterSummary(state);
+    syncVoiceListening(false, state);
     return;
   }
   $("waitingOverlay").classList.add("hidden");
@@ -2718,21 +2792,21 @@ export function renderAll(room) {
       startTurnTimer(myTurn && h.status === "in_progress", h.turnStartedAt);
       prevTurnKey = tk;
     }
+
+    const voiceShouldListen =
+      state.status === "playing" &&
+      !openingFullDealBlocking(state) &&
+      !ui.locked &&
+      getVoiceEnabled() &&
+      myTurn &&
+      h.status === "in_progress";
+    syncVoiceListening(voiceShouldListen, state);
+  } else {
+    syncVoiceListening(false, state);
   }
   _prevStatus = state.status;
-  // Detectar fin de mano y actualizar memoria del bot
-  if (isBotActive() && state.lastHandSummary) {
-    const hn = real(state.handNumber || OFFSET);
-    if (hn !== _prevHandNumber) {
-      _prevHandNumber = hn;
-      const humanSeat = 1 - 1;
-      updateBotMemory(
-        state.lastHandSummary,
-        humanSeat,
-        state.scores,
-      );
-    }
-  }
+  maybeBotAdvanceHandAfterSummary(state);
+  maybeBotTrickOutcomeDialogue(state);
   scheduleBotIfNeededFromGameState(state);
 }
 

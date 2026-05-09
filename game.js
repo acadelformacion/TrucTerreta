@@ -155,10 +155,12 @@ async function applySignedInUi(user) {
   preloadAllAvatars();
 
   if (user && !user.isAnonymous) {
-    const promoModal = document.getElementById("statsPromoModal");
-    if (promoModal) {
-      promoModal.classList.add("hidden");
-      promoModal.setAttribute("aria-hidden", "true");
+    for (const id of ["statsPromoModal", "profilePromoModal"]) {
+      const m = document.getElementById(id);
+      if (m) {
+        m.classList.add("hidden");
+        m.setAttribute("aria-hidden", "true");
+      }
     }
   }
 
