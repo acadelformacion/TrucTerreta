@@ -5,4 +5,4 @@
 // 1. Obtén la teua key a https://aistudio.google.com/app/apikey
 // 2. Substitueix el valor de baix per la teua clau real.
 
-export const GEMINI_API_KEY = "AIzaSyAAk-JrM5f_TfesynZ_NHIbCHONU6ER1dI";
+export const GEMINI_API_KEY = "AIzaSyDp93DdX0__N2yObwVvQEGPU9kxQlqte-c";
